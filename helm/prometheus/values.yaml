@@ -1,0 +1,4 @@
+server:
+    service:
+      type: LoadBalancer
+      port: 9090  # Prometheus exposed on port 9090
