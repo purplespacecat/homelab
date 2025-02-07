@@ -2,3 +2,4 @@
 |Folder|Description|
 | ----------- | ----------- |
 |helm|helm customizations|
+|core|configs for core services|
