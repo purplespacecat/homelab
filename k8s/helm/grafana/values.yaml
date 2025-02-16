@@ -2,5 +2,5 @@ service:
   type: LoadBalancer
   port: 3000  # Grafana exposed on port 3000
 
-adminUser: admin
-adminPassword: admin  # You can change this or set it securely via secrets
+adminUser: admin #This is different in actual setup
+adminPassword: admin   #This is different in actual setup
