@@ -1,6 +1,40 @@
 service:
-  type: LoadBalancer
-  port: 3000  # Grafana exposed on port 3000
+  type: ClusterIP
+  port: 3000
 
-adminUser: admin #This is different in actual setup
-adminPassword: admin   #This is different in actual setup
+ingress:
+  enabled: true
+  ingressClassName: nginx
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+  hosts:
+    - host: grafana.local
+      paths:
+        - path: /
+          pathType: Prefix
+
+persistence:
+  enabled: true
+  size: 10Gi
+  existingClaim: prometheus-grafana
+
+adminUser: admin
+adminPassword: admin   # Change this in production
+
+datasources:
+  datasources.yaml:
+    apiVersion: 1
+    datasources:
+      - name: Prometheus
+        type: prometheus
+        url: http://prometheus-server.monitoring.svc.cluster.local:9090
+        access: proxy
+        isDefault: true
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi

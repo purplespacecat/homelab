@@ -1,0 +1,120 @@
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: local-storage
+provisioner: kubernetes.io/no-provisioner
+volumeBindingMode: WaitForFirstConsumer
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: prom-prometheus-pv
+  labels:
+    app: prometheus
+spec:
+  capacity:
+    storage: 10Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: local-storage
+  local:
+    path: /data/prometheus
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values:
+                - spaceship
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: prom-grafana-pv
+  labels:
+    app: grafana
+spec:
+  capacity:
+    storage: 10Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: local-storage
+  local:
+    path: /data/grafana
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values:
+                - spaceship
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: prom-alertmanager-pv
+  labels:
+    app: alertmanager
+spec:
+  capacity:
+    storage: 10Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: local-storage
+  local:
+    path: /data/alertmanager
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values:
+                - spaceship
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: prom-prometheus-pvc
+  namespace: monitoring
+spec:
+  storageClassName: local-storage
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+  volumeName: prom-prometheus-pv # Explicitly bind to our PV
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: prom-grafana-pvc
+  namespace: monitoring
+spec:
+  storageClassName: local-storage
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+  volumeName: prom-grafana-pv # Explicitly bind to our PV
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: prom-alertmanager-pvc
+  namespace: monitoring
+spec:
+  storageClassName: local-storage
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+  volumeName: prom-alertmanager-pv # Explicitly bind to our PV
