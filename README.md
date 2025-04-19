@@ -1,8 +1,15 @@
 # This repo contains files and scripts that I use for my k8s homelab
 |Folder|Description|
 | ----------- | ----------- |
-|helm|helm customizations|
-|core|configs for core services|
+|k8s/core|Core infrastructure components (namespaces, MetalLB config, storage)|
+|k8s/helm|Helm chart values for various applications and services|
+|k8s/helm/data-apps|Deployments for data applications like crypto dashboard|
+|k8s/helm/grafana|Grafana configuration values|
+|k8s/helm/ingress-nginx|Ingress NGINX controller configuration|
+|k8s/helm/kafka|Kafka and message streaming configuration|
+|k8s/helm/prometheus|Prometheus monitoring stack configuration|
+|network|Network configuration files including cloud-init setups|
+|scripts|Utility scripts for installation and verification|
 
 ## Core Components Installation
 
