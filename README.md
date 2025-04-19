@@ -174,3 +174,168 @@ helm upgrade prometheus prometheus-community/kube-prometheus-stack \
 - The nip.io domain service is used for easy access. It automatically resolves domains like `prometheus.192.168.100.202.nip.io` to the IP address `192.168.100.202`.
 - For production environments, consider using more restrictive permissions on the NFS shares than the current 777.
 - Make sure your firewall allows traffic to ports 80 and 443 on your ingress controller's IP address.
+
+## Exposing Services to Local Network
+
+This guide explains how to expose Kubernetes services to your local network, making them accessible from any device on your network.
+
+### Prerequisites
+
+- A functioning Kubernetes cluster
+- MetalLB installed and configured (see Core Components Installation section)
+- NGINX Ingress Controller installed (see Core Components Installation section)
+
+### 1. Understanding the Components
+
+The process of exposing services in this homelab relies on three key components:
+
+1. **MetalLB**: Provides LoadBalancer service functionality with real IPs from your local network
+2. **NGINX Ingress Controller**: Routes external HTTP/HTTPS requests to internal services
+3. **nip.io**: A free wildcard DNS service that maps any IP to a hostname
+
+### 2. Configuring MetalLB Address Pool
+
+MetalLB needs to be configured with an address pool from your local network:
+
+```bash
+# Check your MetalLB configuration
+kubectl get configmap -n metallb-system config -o yaml
+```
+
+If you need to modify the IP range, edit the `k8s/core/metallb-config.yaml` file:
+
+```yaml
+apiVersion: metallb.io/v1beta1
+kind: IPAddressPool
+metadata:
+  name: first-pool
+  namespace: metallb-system
+spec:
+  addresses:
+  - 192.168.100.200-192.168.100.220  # Adjust this range to fit your network
+```
+
+Apply the changes:
+
+```bash
+kubectl apply -f k8s/core/metallb-config.yaml
+```
+
+### 3. Creating an Ingress Resource
+
+To expose a service, create an Ingress resource:
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: my-service-ingress
+  namespace: my-namespace
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    # Optional: Add TLS or other configurations
+    # nginx.ingress.kubernetes.io/ssl-redirect: "false"
+spec:
+  rules:
+  - host: myservice.192.168.100.202.nip.io  # Replace IP with your ingress controller's external IP
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: my-service
+            port:
+              number: 80
+```
+
+Save this to a file (e.g., `my-service-ingress.yaml`) and apply it:
+
+```bash
+kubectl apply -f my-service-ingress.yaml
+```
+
+### 4. Determining Your Ingress Controller's External IP
+
+To find the external IP assigned to your NGINX Ingress Controller:
+
+```bash
+kubectl get service -n ingress-nginx ingress-nginx-controller
+```
+
+Look for the `EXTERNAL-IP` column. This IP will be used in your nip.io hostnames.
+
+### 5. Accessing Your Services
+
+Services can now be accessed using the nip.io domain format:
+
+```
+http://[service-name].[ingress-controller-ip].nip.io
+```
+
+For example:
+- http://myservice.192.168.100.202.nip.io
+
+### 6. Exposing Non-HTTP Services
+
+For services that don't use HTTP (like databases or message brokers):
+
+1. Create a LoadBalancer service that directly exposes the port:
+
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka-external
+  namespace: kafka
+spec:
+  type: LoadBalancer
+  ports:
+  - port: 9092
+    targetPort: 9092
+    protocol: TCP
+    name: kafka
+  selector:
+    app: kafka
+```
+
+2. Apply the configuration:
+
+```bash
+kubectl apply -f kafka-external-service.yaml
+```
+
+3. Get the assigned external IP:
+
+```bash
+kubectl get svc -n kafka kafka-external
+```
+
+You can then connect to the service using the assigned external IP and port.
+
+### 7. Verifying Exposure
+
+Run the verification script to check your exposed services:
+
+```bash
+./scripts/verify-exposure.sh
+```
+
+### Troubleshooting
+
+1. **Service not accessible:**
+   - Check if the ingress resource was created correctly: `kubectl get ingress -n <namespace>`
+   - Verify that the ingress controller's external IP is reachable from your network
+   - Check ingress controller logs: `kubectl logs -n ingress-nginx -l app.kubernetes.io/name=ingress-nginx`
+
+2. **DNS resolution issues:**
+   - Ensure you're using the correct IP address in the nip.io hostname
+   - Try accessing the service directly via IP if nip.io is not working
+
+3. **MetalLB issues:**
+   - Check MetalLB speaker pods: `kubectl get pods -n metallb-system`
+   - View logs: `kubectl logs -n metallb-system -l app=metallb`
+
+4. **Port conflicts:**
+   - Ensure no other services on your network are using the same ports
+   - Check firewall rules on your router and hosts
