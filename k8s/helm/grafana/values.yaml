@@ -16,7 +16,11 @@ ingress:
 persistence:
   enabled: true
   size: 10Gi
-  existingClaim: prometheus-grafana
+  storageClassName: nfs-storage
+  selector:
+    matchLabels:
+      app: grafana
+      component: server
 
 adminUser: admin
 adminPassword: admin   # Change this in production
