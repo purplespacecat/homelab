@@ -8,7 +8,19 @@ prometheus:
   prometheusSpec:
     retention: 30d
     storageSpec:
-      existingClaim: prom-prometheus-pvc
+      volumeClaimTemplate:
+        metadata:
+          name: prometheus-db
+        spec:
+          storageClassName: nfs-storage
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 10Gi
+          selector:
+            matchLabels:
+              app: prometheus
+              component: server
     resources:
       requests:
         cpu: 500m
@@ -23,6 +35,7 @@ prometheus:
       nginx.ingress.kubernetes.io/ssl-redirect: "false"
     hosts:
       - "prometheus.local"
+      - "prometheus.192.168.100.202.nip.io"  # Updated to use the correct IP
     paths:
       - "/"
     pathType: Prefix
@@ -31,7 +44,12 @@ grafana:
   enabled: true
   persistence:
     enabled: true
-    existingClaim: prom-grafana-pvc
+    storageClassName: nfs-storage
+    size: 10Gi
+    selector:
+      matchLabels:
+        app: grafana
+        component: server
   ingress:
     enabled: true
     ingressClassName: nginx
@@ -39,6 +57,7 @@ grafana:
       nginx.ingress.kubernetes.io/ssl-redirect: "false"
     hosts:
       - "grafana.local"
+      - "grafana.192.168.100.202.nip.io"  # Updated to use the correct IP
     paths:
       - "/"
     pathType: Prefix
@@ -49,7 +68,23 @@ alertmanager:
   enabled: true
   alertmanagerSpec:
     storage:
-      existingClaim: prom-alertmanager-pvc
+      volumeClaimTemplate:
+        metadata:
+          name: alertmanager-db
+        spec:
+          storageClassName: nfs-storage
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 10Gi
+          selector:
+            matchLabels:
+              app: alertmanager
+              component: server
+    podMetadata:
+      labels:
+        app: alertmanager
+        component: server
   ingress:
     enabled: true
     ingressClassName: nginx
@@ -57,6 +92,7 @@ alertmanager:
       nginx.ingress.kubernetes.io/ssl-redirect: "false"
     hosts:
       - "alertmanager.local"
+      - "alertmanager.192.168.100.202.nip.io"  # Updated to use the correct IP
     paths:
       - "/"
     pathType: Prefix

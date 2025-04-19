@@ -1,120 +1,78 @@
 apiVersion: storage.k8s.io/v1
 kind: StorageClass
 metadata:
-  name: local-storage
+  name: nfs-storage
 provisioner: kubernetes.io/no-provisioner
 volumeBindingMode: WaitForFirstConsumer
 ---
 apiVersion: v1
 kind: PersistentVolume
 metadata:
-  name: prom-prometheus-pv
+  name: prometheus-server-pv
   labels:
     app: prometheus
+    component: server
 spec:
   capacity:
     storage: 10Gi
   accessModes:
     - ReadWriteOnce
   persistentVolumeReclaimPolicy: Retain
-  storageClassName: local-storage
-  local:
+  storageClassName: nfs-storage
+  nfs:
+    server: 192.168.100.98
     path: /data/prometheus
-  nodeAffinity:
-    required:
-      nodeSelectorTerms:
-        - matchExpressions:
-            - key: kubernetes.io/hostname
-              operator: In
-              values:
-                - spaceship
 ---
 apiVersion: v1
 kind: PersistentVolume
 metadata:
-  name: prom-grafana-pv
+  name: grafana-pv
   labels:
     app: grafana
+    component: server
 spec:
   capacity:
     storage: 10Gi
   accessModes:
     - ReadWriteOnce
   persistentVolumeReclaimPolicy: Retain
-  storageClassName: local-storage
-  local:
+  storageClassName: nfs-storage
+  nfs:
+    server: 192.168.100.98
     path: /data/grafana
-  nodeAffinity:
-    required:
-      nodeSelectorTerms:
-        - matchExpressions:
-            - key: kubernetes.io/hostname
-              operator: In
-              values:
-                - spaceship
 ---
 apiVersion: v1
 kind: PersistentVolume
 metadata:
-  name: prom-alertmanager-pv
+  name: alertmanager-pv-0
   labels:
     app: alertmanager
+    component: server
 spec:
   capacity:
     storage: 10Gi
   accessModes:
     - ReadWriteOnce
   persistentVolumeReclaimPolicy: Retain
-  storageClassName: local-storage
-  local:
-    path: /data/alertmanager
-  nodeAffinity:
-    required:
-      nodeSelectorTerms:
-        - matchExpressions:
-            - key: kubernetes.io/hostname
-              operator: In
-              values:
-                - spaceship
+  storageClassName: nfs-storage
+  nfs:
+    server: 192.168.100.98
+    path: /data/alertmanager-0
 ---
 apiVersion: v1
-kind: PersistentVolumeClaim
+kind: PersistentVolume
 metadata:
-  name: prom-prometheus-pvc
-  namespace: monitoring
+  name: alertmanager-pv-1
+  labels:
+    app: alertmanager
+    component: server
 spec:
-  storageClassName: local-storage
+  capacity:
+    storage: 10Gi
   accessModes:
     - ReadWriteOnce
-  resources:
-    requests:
-      storage: 10Gi
-  volumeName: prom-prometheus-pv # Explicitly bind to our PV
----
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: prom-grafana-pvc
-  namespace: monitoring
-spec:
-  storageClassName: local-storage
-  accessModes:
-    - ReadWriteOnce
-  resources:
-    requests:
-      storage: 10Gi
-  volumeName: prom-grafana-pv # Explicitly bind to our PV
----
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: prom-alertmanager-pvc
-  namespace: monitoring
-spec:
-  storageClassName: local-storage
-  accessModes:
-    - ReadWriteOnce
-  resources:
-    requests:
-      storage: 10Gi
-  volumeName: prom-alertmanager-pv # Explicitly bind to our PV
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: nfs-storage
+  nfs:
+    server: 192.168.100.98
+    path: /data/alertmanager-1
