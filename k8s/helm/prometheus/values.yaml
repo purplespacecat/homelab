@@ -29,7 +29,7 @@ prometheus:
     ingressClassName: nginx
     annotations:
       nginx.ingress.kubernetes.io/ssl-redirect: "true"
-      cert-manager.io/cluster-issuer: "homelab-issuer"
+      cert-manager.io/cluster-issuer: "homelab-ca-issuer"
     hosts:
       - "prometheus.local"
       - "prometheus.192.168.100.202.nip.io"
@@ -53,7 +53,7 @@ grafana:
     ingressClassName: nginx
     annotations:
       nginx.ingress.kubernetes.io/ssl-redirect: "true"
-      cert-manager.io/cluster-issuer: "homelab-issuer"
+      cert-manager.io/cluster-issuer: "homelab-ca-issuer"
     hosts:
       - "grafana.local"
       - "grafana.192.168.100.202.nip.io"
@@ -92,7 +92,7 @@ alertmanager:
     ingressClassName: nginx
     annotations:
       nginx.ingress.kubernetes.io/ssl-redirect: "true"
-      cert-manager.io/cluster-issuer: "homelab-issuer"
+      cert-manager.io/cluster-issuer: "homelab-ca-issuer"
     hosts:
       - "alertmanager.local"
       - "alertmanager.192.168.100.202.nip.io"

@@ -13,7 +13,7 @@ echo -e "${BLUE}========================================================${NC}"
 
 # Step 1: Install cert-manager (namespace and Helm chart only)
 echo -e "\n${YELLOW}Installing cert-manager namespace and Helm chart...${NC}"
-kubectl apply -f k8s/core/cert-manager.yaml
+kubectl apply -f k8s/cert-manager/cert-manager.yaml
 if [ $? -ne 0 ]; then
     echo -e "${RED}Failed to install cert-manager. Exiting.${NC}"
     exit 1
@@ -51,10 +51,10 @@ sleep 10
 
 # Step 4: Apply ClusterIssuers
 echo -e "\n${YELLOW}Creating ClusterIssuers...${NC}"
-kubectl apply -f k8s/core/cert-manager-issuers.yaml
+kubectl apply -f k8s/cert-manager/cert-manager-issuers.yaml
 if [ $? -ne 0 ]; then
     echo -e "${RED}Failed to create ClusterIssuers. Check if CRDs are fully installed.${NC}"
-    echo -e "${RED}You may need to wait a bit longer and run: kubectl apply -f k8s/core/cert-manager-issuers.yaml${NC}"
+    echo -e "${RED}You may need to wait a bit longer and run: kubectl apply -f k8s/cert-manager/cert-manager-issuers.yaml${NC}"
     exit 1
 fi
 
