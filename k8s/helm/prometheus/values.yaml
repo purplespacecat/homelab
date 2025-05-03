@@ -12,7 +12,7 @@ prometheus:
         metadata:
           name: prometheus-db
         spec:
-          storageClassName: nfs-client-dynamic  # Updated to use dynamic provisioner
+          storageClassName: nfs-client-dynamic  # Using dynamic provisioner
           accessModes: ["ReadWriteOnce"]
           resources:
             requests:
@@ -29,7 +29,7 @@ prometheus:
     ingressClassName: nginx
     annotations:
       nginx.ingress.kubernetes.io/ssl-redirect: "true"
-      cert-manager.io/cluster-issuer: "selfsigned-issuer"
+      cert-manager.io/cluster-issuer: "homelab-issuer"
     hosts:
       - "prometheus.local"
       - "prometheus.192.168.100.202.nip.io"
@@ -46,14 +46,14 @@ grafana:
   enabled: true
   persistence:
     enabled: true
-    storageClassName: nfs-client-dynamic  # Updated to use dynamic provisioner
+    storageClassName: local-storage  # Keeping the original storage class to avoid migration issues
     size: 10Gi
   ingress:
     enabled: true
     ingressClassName: nginx
     annotations:
       nginx.ingress.kubernetes.io/ssl-redirect: "true"
-      cert-manager.io/cluster-issuer: "selfsigned-issuer"
+      cert-manager.io/cluster-issuer: "homelab-issuer"
     hosts:
       - "grafana.local"
       - "grafana.192.168.100.202.nip.io"
@@ -65,12 +65,10 @@ grafana:
         hosts:
           - "grafana.local"
           - "grafana.192.168.100.202.nip.io"
-  # Using a secure random password and storing in a secret
   admin:
     existingSecret: "grafana-admin-credentials"
     userKey: admin-user
     passwordKey: admin-password
-  # Removed hardcoded credentials
 
 alertmanager:
   enabled: true
@@ -80,7 +78,7 @@ alertmanager:
         metadata:
           name: alertmanager-db
         spec:
-          storageClassName: nfs-client-dynamic  # Updated to use dynamic provisioner
+          storageClassName: nfs-client-dynamic  # Using dynamic provisioner
           accessModes: ["ReadWriteOnce"]
           resources:
             requests:
@@ -94,7 +92,7 @@ alertmanager:
     ingressClassName: nginx
     annotations:
       nginx.ingress.kubernetes.io/ssl-redirect: "true"
-      cert-manager.io/cluster-issuer: "selfsigned-issuer"
+      cert-manager.io/cluster-issuer: "homelab-issuer"
     hosts:
       - "alertmanager.local"
       - "alertmanager.192.168.100.202.nip.io"
