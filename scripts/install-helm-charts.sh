@@ -58,9 +58,9 @@ fi
 # Create Kubernetes namespaces
 echo -e "\n${BLUE}Creating Kubernetes namespaces...${NC}"
 echo -e "${YELLOW}Creating monitoring namespace...${NC}"
-kubectl apply -f ../k8s/core/monitoring-namespaces.yaml
+kubectl apply -f ../k8s/core/namespaces/monitoring-namespaces.yaml
 echo -e "${YELLOW}Creating ingress-nginx namespace...${NC}"
-kubectl apply -f ../k8s/core/ingress-nginx-namespace.yaml
+kubectl apply -f ../k8s/core/namespaces/ingress-nginx-namespace.yaml
 
 # Install MetalLB
 echo -e "\n${BLUE}Installing MetalLB...${NC}"
@@ -72,13 +72,13 @@ kubectl wait --namespace metallb-system \
   --selector=app=metallb \
   --timeout=90s || true
 echo -e "${YELLOW}Applying MetalLB configuration...${NC}"
-kubectl apply -f ../k8s/core/metallb-config.yaml
+kubectl apply -f ../k8s/core/networking/metallb-config.yaml
 echo -e "${GREEN}✓ MetalLB installed${NC}"
 
 # Setup storage for monitoring stack
 echo -e "\n${BLUE}Setting up storage for monitoring stack...${NC}"
 echo -e "${YELLOW}Creating PersistentVolumes...${NC}"
-kubectl apply -f ../k8s/core/monitoring-storage.yaml
+kubectl apply -f ../k8s/core/storage/monitoring-storage.yaml
 echo -e "${GREEN}✓ PersistentVolumes created${NC}"
 echo -e "${YELLOW}Verifying PersistentVolumes...${NC}"
 kubectl get pv
