@@ -12,15 +12,11 @@ prometheus:
         metadata:
           name: prometheus-db
         spec:
-          storageClassName: nfs-storage
+          storageClassName: nfs-client-dynamic  # Updated to use dynamic provisioner
           accessModes: ["ReadWriteOnce"]
           resources:
             requests:
               storage: 10Gi
-          selector:
-            matchLabels:
-              app: prometheus
-              component: server
     resources:
       requests:
         cpu: 500m
@@ -32,37 +28,49 @@ prometheus:
     enabled: true
     ingressClassName: nginx
     annotations:
-      nginx.ingress.kubernetes.io/ssl-redirect: "false"
+      nginx.ingress.kubernetes.io/ssl-redirect: "true"
+      cert-manager.io/cluster-issuer: "selfsigned-issuer"
     hosts:
       - "prometheus.local"
-      - "prometheus.192.168.100.202.nip.io"  # Updated to use the correct IP
+      - "prometheus.192.168.100.202.nip.io"
     paths:
       - "/"
     pathType: Prefix
+    tls:
+      - secretName: prometheus-tls
+        hosts:
+          - "prometheus.local"
+          - "prometheus.192.168.100.202.nip.io"
 
 grafana:
   enabled: true
   persistence:
     enabled: true
-    storageClassName: nfs-storage
+    storageClassName: nfs-client-dynamic  # Updated to use dynamic provisioner
     size: 10Gi
-    selector:
-      matchLabels:
-        app: grafana
-        component: server
   ingress:
     enabled: true
     ingressClassName: nginx
     annotations:
-      nginx.ingress.kubernetes.io/ssl-redirect: "false"
+      nginx.ingress.kubernetes.io/ssl-redirect: "true"
+      cert-manager.io/cluster-issuer: "selfsigned-issuer"
     hosts:
       - "grafana.local"
-      - "grafana.192.168.100.202.nip.io"  # Updated to use the correct IP
+      - "grafana.192.168.100.202.nip.io"
     paths:
       - "/"
     pathType: Prefix
-  adminUser: admin
-  adminPassword: "admin"
+    tls:
+      - secretName: grafana-tls
+        hosts:
+          - "grafana.local"
+          - "grafana.192.168.100.202.nip.io"
+  # Using a secure random password and storing in a secret
+  admin:
+    existingSecret: "grafana-admin-credentials"
+    userKey: admin-user
+    passwordKey: admin-password
+  # Removed hardcoded credentials
 
 alertmanager:
   enabled: true
@@ -72,15 +80,11 @@ alertmanager:
         metadata:
           name: alertmanager-db
         spec:
-          storageClassName: nfs-storage
+          storageClassName: nfs-client-dynamic  # Updated to use dynamic provisioner
           accessModes: ["ReadWriteOnce"]
           resources:
             requests:
               storage: 10Gi
-          selector:
-            matchLabels:
-              app: alertmanager
-              component: server
     podMetadata:
       labels:
         app: alertmanager
@@ -89,13 +93,19 @@ alertmanager:
     enabled: true
     ingressClassName: nginx
     annotations:
-      nginx.ingress.kubernetes.io/ssl-redirect: "false"
+      nginx.ingress.kubernetes.io/ssl-redirect: "true"
+      cert-manager.io/cluster-issuer: "selfsigned-issuer"
     hosts:
       - "alertmanager.local"
-      - "alertmanager.192.168.100.202.nip.io"  # Updated to use the correct IP
+      - "alertmanager.192.168.100.202.nip.io"
     paths:
       - "/"
     pathType: Prefix
+    tls:
+      - secretName: alertmanager-tls
+        hosts:
+          - "alertmanager.local"
+          - "alertmanager.192.168.100.202.nip.io"
 
 kubeScheduler:
   enabled: false

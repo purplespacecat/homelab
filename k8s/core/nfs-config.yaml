@@ -1,0 +1,11 @@
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: nfs-config
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/part-of: monitoring
+data:
+  nfs-server: "192.168.100.98"
+  base-path: "/data"
+  mount-options: "hard,nfsvers=4.1,noatime"
