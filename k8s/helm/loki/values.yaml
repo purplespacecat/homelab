@@ -1,0 +1,97 @@
+loki:
+  structuredConfig:
+    auth_enabled: false
+    server:
+      http_listen_port: 3100
+    storage:
+      bucketStore:
+        chunkCacheConfig:
+          memcached:
+            batch_size: 256
+            parallelism: 10
+          metricsEnabled: false
+      filesystem:
+        directory: /var/loki/chunks
+    common:
+      ring:
+        kvstore:
+          store: memberlist
+    schema_config:
+      configs:
+        - from: 2020-10-24
+          store: boltdb-shipper
+          object_store: filesystem
+          schema: v11
+          index:
+            prefix: index_
+            period: 24h
+    compactor:
+      working_directory: /var/loki/compactor
+      shared_store: filesystem
+      compaction_interval: 5m
+      retention_enabled: true
+      retention_delete_delay: 2h
+      retention_delete_worker_count: 150
+    limits_config:
+      retention_period: 30d
+      enforce_metric_name: false
+      reject_old_samples: true
+      reject_old_samples_max_age: 168h
+
+singleBinary:
+  replicas: 1
+  persistence:
+    enabled: true
+    storageClass: "nfs-client-dynamic"
+    size: 50Gi
+    accessModes:
+      - ReadWriteOnce
+  resources:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+
+promtail:
+  enabled: true
+  config:
+    logLevel: info
+    serverPort: 3101
+    clients:
+      - url: http://loki-gateway/loki/api/v1/push
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+
+gateway:
+  enabled: true
+  ingress:
+    enabled: true
+    ingressClassName: nginx
+    annotations:
+      nginx.ingress.kubernetes.io/ssl-redirect: "true"
+      cert-manager.io/cluster-issuer: "homelab-ca-issuer"
+    hosts:
+      - "loki.local"
+      - "loki.192.168.100.202.nip.io"
+    paths:
+      - "/"
+    pathType: Prefix
+    tls:
+      - secretName: loki-tls
+        hosts:
+          - "loki.local"
+          - "loki.192.168.100.202.nip.io"
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 100m
+      memory: 128Mi
