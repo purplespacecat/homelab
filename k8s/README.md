@@ -1,6 +1,16 @@
 # Kubernetes Resources Documentation
 
-This document provides an overview of all Kubernetes resources defined in this repository for the homelab setup. It explains the purpose and functionality of each resource.
+This document provides an overview of all Kubernetes resources defined in this repository for the kubeadm homelab setup. It explains the purpose and functionality of each resource.
+
+## Important Notes for Kubeadm
+
+This repository has been migrated from K3s to **kubeadm**. All K3s-specific configurations (like HelmChart CRDs) have been removed and replaced with standard Helm CLI installations.
+
+**Key Changes:**
+- All Helm charts are now installed via `helm` CLI commands
+- Storage class standardized to `nfs-client` (provided by NFS provisioner)
+- No K3s-specific `local-storage` or HelmChart CRDs
+- Installation scripts handle all component deployments
 
 ## Directory Structure
 
@@ -10,12 +20,11 @@ k8s/
 │   ├── namespaces/                 # Namespace definitions
 │   │   ├── ingress-nginx-namespace.yaml
 │   │   └── monitoring-namespaces.yaml
-│   ├── networking/                 # Network configuration 
+│   ├── networking/                 # Network configuration
 │   │   └── metallb-config.yaml
 │   ├── storage/                    # Storage configuration
-│   │   ├── monitoring-storage.yaml
-│   │   ├── nfs-config.yaml
-│   │   └── nfs-subdir-external-provisioner.yaml
+│   │   ├── monitoring-storage.yaml  # Static PVs (optional/legacy)
+│   │   └── nfs-config.yaml          # NFS server configuration
 │   └── security/                   # Security-related configurations
 │       └── network-policies.yaml
 ├── applications/                   # Application deployments
@@ -23,18 +32,15 @@ k8s/
 │   │   └── crypto-data-app-deployment.yaml
 │   └── kafka/                      # Kafka-related applications
 ├── cert-manager/                   # TLS certificate management
-│   ├── cert-manager.yaml
-│   ├── cert-manager-issuers.yaml
-│   └── local-ca.yaml
-└── helm/                           # Helm chart values 
-    ├── grafana/
-    │   └── values.yaml
+│   ├── cert-manager-issuers.yaml   # Let's Encrypt issuer
+│   └── local-ca.yaml               # Local CA for homelab
+└── helm/                           # Helm chart values
     ├── ingress-nginx/
     │   └── values.yaml
     ├── kafka/
     │   └── values.yaml
     └── prometheus/
-        └── values.yaml
+        └── values.yaml             # Includes Grafana configuration
 ```
 
 ## Core Resources
@@ -61,33 +67,29 @@ Configures MetalLB for load balancing in a bare-metal Kubernetes environment:
 ### Storage Configuration
 
 #### `storage/monitoring-storage.yaml`
-Sets up persistent storage for monitoring components using NFS:
+**Optional/Legacy** - Contains static PersistentVolumes for monitoring components:
 
-1. **StorageClass**: `nfs-storage`
-   - Uses the `no-provisioner` which requires manual PV creation
-   - **VolumeBindingMode**: `WaitForFirstConsumer` - Delays volume binding until a pod uses it
+- **PersistentVolumes** (all use `nfs-client` StorageClass):
+  - **prometheus-server-pv**: 10Gi storage at `/data/prometheus` on NFS server
+  - **grafana-pv**: 10Gi storage at `/data/grafana` on NFS server
+  - **alertmanager-pv-0** and **alertmanager-pv-1**: 10Gi storage each at respective paths
+  - All have specific labels that can be used by PVC selectors
 
-2. **StorageClass**: `nfs-client-dynamic`
-   - Uses the dynamic provisioner for automatic PV creation
-   - Set as the default storage class
-
-3. **PersistentVolumes**:
-   - **prometheus-server-pv**: 10Gi storage at `/data/prometheus` on NFS server
-   - **grafana-pv**: 10Gi storage at `/data/grafana` on NFS server
-   - **alertmanager-pv-0** and **alertmanager-pv-1**: 10Gi storage each at respective paths
-   - All volumes use the `nfs-storage` storage class
-   - All have specific labels that match the selectors in PVCs defined in Helm values
+**Note**: With the NFS provisioner installed, these static PVs are optional. The `nfs-client` StorageClass will dynamically provision volumes as needed.
 
 #### `storage/nfs-config.yaml`
 Contains NFS server configuration:
 - **ConfigMap**: Stores NFS server address (192.168.100.98) and mount options
 - Used by various components that need to access NFS storage
 
-#### `storage/nfs-subdir-external-provisioner.yaml`
-Configures the NFS subdir external provisioner:
-- Creates a dedicated namespace `nfs-provisioner` for the provisioner
-- Deploys the provisioner using a Helm chart
-- Configures NFS connection details and StorageClass parameters
+#### NFS Subdir External Provisioner (Installed via Helm)
+**Installed by**: `scripts/install-nfs-provisioner.sh`
+
+The NFS provisioner is now installed via Helm CLI instead of K3s HelmChart CRD:
+- Creates a dedicated namespace `nfs-provisioner`
+- Creates the `nfs-client` StorageClass (set as default)
+- Automatically provisions PersistentVolumes on the NFS server
+- Configuration: NFS server at 192.168.100.98, path `/data`
 
 ### Security Resources
 
@@ -100,16 +102,18 @@ Implements network security policies to restrict pod-to-pod communication:
 
 ## Certificate Management
 
-### `cert-manager/cert-manager.yaml`
-Configures cert-manager for TLS certificate management:
+### Cert-Manager (Installed via Helm)
+**Installed by**: `scripts/install-cert-manager.sh`
+
+Cert-manager is now installed via Helm CLI instead of K3s HelmChart CRD:
 - Creates the `cert-manager` namespace
-- Deploys cert-manager through a Helm chart with CRDs enabled
-- Sets security policy configuration
+- Deploys cert-manager with CRDs enabled
+- Installs version v1.13.1 by default
 
 ### `cert-manager/cert-manager-issuers.yaml`
-Defines certificate issuers for the homelab:
-- **selfsigned-issuer**: For self-signed certificates
+Defines certificate issuer for the homelab:
 - **homelab-issuer**: Let's Encrypt issuer configured for HTTP-01 challenges through Nginx
+- Used for obtaining public TLS certificates
 
 ### `cert-manager/local-ca.yaml`
 Sets up a local Certificate Authority for the homelab:
@@ -128,37 +132,30 @@ Deploys a cryptocurrency price dashboard:
 ## Helm Chart Values
 
 ### `helm/prometheus/values.yaml`
-Configures the Prometheus monitoring stack:
+Configures the Prometheus monitoring stack (includes Prometheus, Grafana, and Alertmanager):
 
 1. **Prometheus Server**:
-   - **Storage**: Uses 10Gi PV with `nfs-client-dynamic` class
+   - **Storage**: Uses 10Gi PV with `nfs-client` StorageClass
    - **Retention**: 30 days data retention
    - **Resources**: Requests 500m CPU, 512Mi memory; limits to 1000m CPU, 1Gi memory
    - **Ingress**: Exposes at `prometheus.local` and `prometheus.192.168.100.202.nip.io`
    - **TLS**: Configured with `homelab-ca-issuer`
 
-2. **Grafana**:
-   - **Storage**: 10Gi persistent storage with `local-storage` class
+2. **Grafana** (bundled with Prometheus stack):
+   - **Storage**: 10Gi persistent storage with `nfs-client` StorageClass
    - **Ingress**: Configured at `grafana.local` and `grafana.192.168.100.202.nip.io`
    - **Security**: Uses a Kubernetes secret for admin credentials
    - **TLS**: Configured with `homelab-ca-issuer`
+   - **Note**: This is the primary Grafana configuration; separate grafana/values.yaml has been removed
 
 3. **AlertManager**:
-   - **Storage**: 10Gi with `nfs-client-dynamic` for each replica
+   - **Storage**: 10Gi with `nfs-client` StorageClass for each replica
    - **Ingress**: Available at `alertmanager.local` and `alertmanager.192.168.100.202.nip.io`
    - **TLS**: Configured with `homelab-ca-issuer`
-   
+
 4. **Exporters**:
    - **Node Exporter**: Enabled to collect host metrics
    - **Kube State Metrics**: Enabled to collect Kubernetes object metrics
-
-### `helm/grafana/values.yaml`
-Dedicated Grafana configuration:
-- **Service**: ClusterIP type on port 3000
-- **Ingress**: Exposed at `grafana.local`
-- **Storage**: 10Gi with label-based selector for the PV
-- **Data Sources**: Pre-configured with Prometheus
-- **Resources**: Requests 100m CPU, 128Mi memory; limits to 500m CPU, 512Mi memory
 
 ### `helm/ingress-nginx/values.yaml`
 NGINX Ingress Controller configuration:
@@ -194,13 +191,75 @@ Configuration for Kafka-related applications:
 3. **Secure Credentials**: Grafana admin credentials stored in Kubernetes secrets
 4. **NFS Security**: Improved NFS server permission settings
 
-## Usage
+## Installation
 
-These resources should be applied to a Kubernetes cluster in the following order:
-1. Core namespace definitions
-2. Storage configurations (NFS provisioner)
-3. MetalLB for load balancing
-4. cert-manager for TLS
-5. Ingress controller
-6. Monitoring stack
-7. Applications
+### Quick Start (Recommended)
+
+Use the master installation script to install all components in the correct order:
+
+```bash
+../scripts/install-all-helm-charts.sh
+```
+
+This script will install:
+1. NFS Subdir External Provisioner (storage)
+2. MetalLB (load balancing)
+3. Cert-Manager (TLS certificates)
+4. NGINX Ingress Controller
+5. Prometheus Stack (Prometheus, Grafana, Alertmanager)
+
+### Manual Installation Order
+
+If installing components manually, follow this order:
+
+1. **Storage**: Install NFS provisioner
+   ```bash
+   ../scripts/install-nfs-provisioner.sh
+   ```
+
+2. **Namespaces**: Create core namespaces
+   ```bash
+   kubectl apply -f core/namespaces/
+   ```
+
+3. **MetalLB**: Install load balancer
+   ```bash
+   kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.13.12/config/manifests/metallb-native.yaml
+   sleep 10
+   kubectl apply -f core/networking/metallb-config.yaml
+   ```
+
+4. **Cert-Manager**: Install certificate management
+   ```bash
+   ../scripts/install-cert-manager.sh
+   ```
+
+5. **Ingress Controller**: Install NGINX
+   ```bash
+   helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+   helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx \
+     --namespace ingress-nginx \
+     -f helm/ingress-nginx/values.yaml
+   ```
+
+6. **Monitoring Stack**: Install Prometheus, Grafana, Alertmanager
+   ```bash
+   kubectl apply -f core/storage/monitoring-storage.yaml  # Optional static PVs
+   helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+   helm upgrade --install prometheus prometheus-community/kube-prometheus-stack \
+     --namespace monitoring \
+     -f helm/prometheus/values.yaml
+   ```
+
+7. **Applications**: Deploy your applications
+   ```bash
+   kubectl apply -f applications/
+   ```
+
+## Uninstallation
+
+To remove all components:
+
+```bash
+../scripts/uninstall-all-helm-charts.sh
+```
