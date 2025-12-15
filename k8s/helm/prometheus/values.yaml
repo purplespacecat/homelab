@@ -12,7 +12,7 @@ prometheus:
         metadata:
           name: prometheus-db
         spec:
-          storageClassName: nfs-client-dynamic  # Using dynamic provisioner
+          storageClassName: nfs-client  # Using NFS dynamic provisioner
           accessModes: ["ReadWriteOnce"]
           resources:
             requests:
@@ -46,7 +46,7 @@ grafana:
   enabled: true
   persistence:
     enabled: true
-    storageClassName: local-storage  # Keeping the original storage class to avoid migration issues
+    storageClassName: nfs-client  # Using NFS dynamic provisioner
     size: 10Gi
   ingress:
     enabled: true
@@ -78,7 +78,7 @@ alertmanager:
         metadata:
           name: alertmanager-db
         spec:
-          storageClassName: nfs-client-dynamic  # Using dynamic provisioner
+          storageClassName: nfs-client  # Using NFS dynamic provisioner
           accessModes: ["ReadWriteOnce"]
           resources:
             requests:
