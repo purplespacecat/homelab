@@ -1,26 +1,6 @@
-# This storage class is kept for backwards compatibility
-apiVersion: storage.k8s.io/v1
-kind: StorageClass
-metadata:
-  name: nfs-storage
-  annotations:
-    storageclass.kubernetes.io/is-default-class: "false"
-provisioner: kubernetes.io/no-provisioner
-volumeBindingMode: WaitForFirstConsumer
----
-# Adding new storage class that uses the dynamic provisioner
-apiVersion: storage.k8s.io/v1
-kind: StorageClass
-metadata:
-  name: nfs-client-dynamic
-  annotations:
-    storageclass.kubernetes.io/is-default-class: "true"
-provisioner: k8s-sigs.io/nfs-subdir-external-provisioner
-parameters:
-  archiveOnDelete: "false"
----
-# The following PVs are kept for existing deployments
-# For new deployments, use the dynamic provisioner with PVCs only
+# Legacy static PVs for monitoring stack
+# NOTE: The nfs-client StorageClass is created by the nfs-subdir-external-provisioner Helm chart
+# These static PVs use manual provisioning and are kept for backward compatibility
 apiVersion: v1
 kind: PersistentVolume
 metadata:
@@ -34,7 +14,7 @@ spec:
   accessModes:
     - ReadWriteOnce
   persistentVolumeReclaimPolicy: Retain
-  storageClassName: nfs-storage
+  storageClassName: nfs-client
   nfs:
     server: 192.168.100.98
     path: /data/prometheus
@@ -52,7 +32,7 @@ spec:
   accessModes:
     - ReadWriteOnce
   persistentVolumeReclaimPolicy: Retain
-  storageClassName: nfs-storage
+  storageClassName: nfs-client
   nfs:
     server: 192.168.100.98
     path: /data/grafana
@@ -70,7 +50,7 @@ spec:
   accessModes:
     - ReadWriteOnce
   persistentVolumeReclaimPolicy: Retain
-  storageClassName: nfs-storage
+  storageClassName: nfs-client
   nfs:
     server: 192.168.100.98
     path: /data/alertmanager-0
@@ -88,7 +68,7 @@ spec:
   accessModes:
     - ReadWriteOnce
   persistentVolumeReclaimPolicy: Retain
-  storageClassName: nfs-storage
+  storageClassName: nfs-client
   nfs:
     server: 192.168.100.98
     path: /data/alertmanager-1

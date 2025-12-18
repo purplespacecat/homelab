@@ -1,6 +1,6 @@
 # Kubernetes Homelab Repository
 
-This repo contains files and scripts that I use for my k8s homelab.
+This repo contains files and scripts for a Kubernetes homelab running on **kubeadm**.
 
 ## Repository Structure
 
@@ -16,25 +16,64 @@ This repo contains files and scripts that I use for my k8s homelab.
 |network|Network configuration files including cloud-init setups|
 |scripts|Utility scripts for installation and verification|
 
-## Core Components Installation
+## Quick Start
 
-### 1. MetalLB Installation
+### Complete Installation (Recommended)
+
+Install the entire homelab stack with a single command:
+
 ```bash
-kubectl apply -f https://raw.githubusercontent.com/metallb/metallb-operator/v0.13.12/config/manifests/metallb-native.yaml
-kubectl apply -f k8s/core/metallb-config.yaml
+./scripts/install-all-helm-charts.sh
 ```
 
-### 2. NGINX Ingress Controller Installation
+This will install:
+1. NFS Subdir External Provisioner (dynamic storage)
+2. MetalLB (LoadBalancer support)
+3. Cert-Manager (TLS certificates)
+4. NGINX Ingress Controller
+5. Prometheus Stack (Prometheus, Grafana, Alertmanager)
+
+### Complete Uninstallation
+
+To remove all components:
+
+```bash
+./scripts/uninstall-all-helm-charts.sh
+```
+
+## Individual Component Installation
+
+If you prefer to install components individually:
+
+### 1. NFS Provisioner Installation
+```bash
+./scripts/install-nfs-provisioner.sh
+```
+
+### 2. MetalLB Installation
+```bash
+kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.13.12/config/manifests/metallb-native.yaml
+# Wait for MetalLB to be ready
+sleep 10
+kubectl apply -f k8s/core/networking/metallb-config.yaml
+```
+
+### 3. Cert-Manager Installation
+```bash
+./scripts/install-cert-manager.sh
+```
+
+### 4. NGINX Ingress Controller Installation
 ```bash
 # Create namespace
-kubectl apply -f k8s/core/ingress-nginx-namespace.yaml
+kubectl apply -f k8s/core/namespaces/ingress-nginx-namespace.yaml
 
 # Add and update helm repo
 helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
 helm repo update
 
 # Install nginx-ingress
-helm install ingress-nginx ingress-nginx/ingress-nginx \
+helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx \
   --namespace ingress-nginx \
   -f k8s/helm/ingress-nginx/values.yaml
 ```
@@ -77,20 +116,34 @@ Each Kubernetes node needs to be able to mount the NFS shares.
 ./scripts/setup-nfs-client.sh
 ```
 
-### 3. Create Storage Resources in Kubernetes
+### 3. Install NFS Provisioner
+
+The NFS provisioner creates a dynamic StorageClass that automatically provisions PersistentVolumes:
 
 ```bash
-# Create the monitoring namespace
-kubectl apply -f k8s/core/monitoring-namespaces.yaml
+./scripts/install-nfs-provisioner.sh
+```
 
-# Create the PersistentVolumes for Prometheus, Grafana, and Alertmanager
-kubectl apply -f k8s/core/monitoring-storage.yaml
+Or install the entire stack:
 
-# Verify that the PVs were created correctly
+```bash
+./scripts/install-all-helm-charts.sh
+```
+
+### 4. Verify Storage Setup
+
+```bash
+# Check that the storage class was created
+kubectl get storageclass nfs-client
+
+# Optional: Create static PVs if needed (for backward compatibility)
+kubectl apply -f k8s/core/storage/monitoring-storage.yaml
+
+# Verify PVs
 kubectl get pv
 ```
 
-### 4. Install Prometheus Stack with Helm
+### 5. Install Prometheus Stack with Helm
 
 ```bash
 # Add the Prometheus Helm repository
@@ -106,7 +159,7 @@ helm install prometheus prometheus-community/kube-prometheus-stack \
 kubectl get pods -n monitoring --watch
 ```
 
-### 5. Verify and Access Services
+### 6. Verify and Access Services
 
 Run the verification script to check that everything is working properly:
 
@@ -122,7 +175,7 @@ The script will output the URLs you can use to access your services. Typically, 
 
 > **Note**: The IP address in the URLs should match the external IP of your NGINX Ingress Controller. The script will show you the correct address.
 
-### 6. Troubleshooting PVC Binding Issues
+### 7. Troubleshooting PVC Binding Issues
 
 If PVCs remain in a "Pending" state, follow these steps:
 
@@ -159,7 +212,7 @@ If PVCs remain in a "Pending" state, follow these steps:
    ssh 192.168.100.98 "sudo chmod -R 777 /data/alertmanager-0 /data/alertmanager-1"
    ```
 
-### 7. Updating Configuration
+### 8. Updating Configuration
 
 If you need to update the Prometheus stack configuration:
 

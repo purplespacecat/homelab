@@ -1,5 +1,0 @@
-env:
-  kafka_broker: kafka.kafka.svc.cluster.local:9092
-  kafka_topic: crypto-prices
-  api_url: https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum&vs_currencies=usd
-  poll_interval: 10
