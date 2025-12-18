@@ -4,9 +4,9 @@ Kubernetes deployment for Plex Media Server based on the official [plexinc/pms-d
 
 ## Prerequisites
 
-1. A Kubernetes cluster with storage provisioner
-2. NFS server with media files (currently configured: `192.168.100.98:/data/media`)
-3. Local storage class for Plex configuration (NOT NFS - file locking required)
+1. A Kubernetes cluster with NFS storage provisioner
+2. NFS server configured with `/data` exported (see `scripts/setup-nfs-server.sh`)
+3. Media files accessible at `192.168.100.98:/data/media`
 4. Plex claim token from https://www.plex.tv/claim
 
 ## Configuration Required
@@ -42,12 +42,38 @@ volumes:
       path: "/data/media"  # Update to your media location
 ```
 
-### 5. Storage Class (Optional)
-If you have a specific StorageClass for local storage:
+## Storage Configuration
+
+This deployment uses two types of storage:
+
+### 1. Config Storage (Dynamic NFS)
+Plex configuration is stored using the `nfs-client` StorageClass:
 ```yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: plex-config
 spec:
-  storageClassName: your-local-storage-class
+  storageClassName: nfs-client  # Dynamic provisioning via NFS
+  resources:
+    requests:
+      storage: 50Gi
 ```
+
+The NFS provisioner automatically creates a directory on your NFS server at:
+`192.168.100.98:/data/media-plex-config-pvc-xxxxx`
+
+### 2. Media Storage (Direct NFS Mount)
+Media files are mounted directly from NFS (read-only):
+```yaml
+volumes:
+  - name: media
+    nfs:
+      server: "192.168.100.98"
+      path: "/data/media"
+```
+
+Place your media files on the NFS server at `/data/media/`.
 
 ## Deployment
 
@@ -78,10 +104,24 @@ kubectl get svc -n media plex-service
 
 ## Important Notes
 
-### Storage Warning
-- **DO NOT use NFS for `/config` volume** - this will corrupt the Plex database
-- Use local storage or a storage class that supports file locking
-- Media (`/data`) can safely use NFS as it's read-only
+### Storage Setup
+Before deploying Plex, ensure your NFS server is properly configured:
+
+```bash
+# Setup NFS server with required directories
+./scripts/setup-nfs-server.sh 192.168.100.98
+
+# Verify NFS is working
+./scripts/verify-nfs-setup.sh
+
+# Install NFS provisioner in Kubernetes
+./scripts/install-nfs-provisioner.sh
+
+# Add your media files to the NFS server
+ssh 192.168.100.98
+sudo mkdir -p /data/media
+# Copy your movies, TV shows, etc. to /data/media/
+```
 
 ### Networking Options
 Current setup uses `hostNetwork: true` for simplicity. This means:
