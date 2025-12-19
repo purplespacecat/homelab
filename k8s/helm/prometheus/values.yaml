@@ -28,19 +28,13 @@ prometheus:
     enabled: true
     ingressClassName: nginx
     annotations:
-      nginx.ingress.kubernetes.io/ssl-redirect: "true"
-      cert-manager.io/cluster-issuer: "homelab-ca-issuer"
+      nginx.ingress.kubernetes.io/ssl-redirect: "false"
     hosts:
       - "prometheus.local"
-      - "prometheus.192.168.100.202.nip.io"
+      - "prometheus.192.168.100.200.nip.io"
     paths:
       - "/"
     pathType: Prefix
-    tls:
-      - secretName: prometheus-tls
-        hosts:
-          - "prometheus.local"
-          - "prometheus.192.168.100.202.nip.io"
 
 grafana:
   enabled: true
@@ -52,19 +46,13 @@ grafana:
     enabled: true
     ingressClassName: nginx
     annotations:
-      nginx.ingress.kubernetes.io/ssl-redirect: "true"
-      cert-manager.io/cluster-issuer: "homelab-ca-issuer"
+      nginx.ingress.kubernetes.io/ssl-redirect: "false"
     hosts:
       - "grafana.local"
-      - "grafana.192.168.100.202.nip.io"
+      - "grafana.192.168.100.200.nip.io"
     paths:
       - "/"
     pathType: Prefix
-    tls:
-      - secretName: grafana-tls
-        hosts:
-          - "grafana.local"
-          - "grafana.192.168.100.202.nip.io"
   admin:
     existingSecret: "grafana-admin-credentials"
     userKey: admin-user
@@ -91,19 +79,13 @@ alertmanager:
     enabled: true
     ingressClassName: nginx
     annotations:
-      nginx.ingress.kubernetes.io/ssl-redirect: "true"
-      cert-manager.io/cluster-issuer: "homelab-ca-issuer"
+      nginx.ingress.kubernetes.io/ssl-redirect: "false"
     hosts:
       - "alertmanager.local"
-      - "alertmanager.192.168.100.202.nip.io"
+      - "alertmanager.192.168.100.200.nip.io"
     paths:
       - "/"
     pathType: Prefix
-    tls:
-      - secretName: alertmanager-tls
-        hosts:
-          - "alertmanager.local"
-          - "alertmanager.192.168.100.202.nip.io"
 
 kubeScheduler:
   enabled: false
