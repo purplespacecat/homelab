@@ -139,15 +139,28 @@ echo -e "${GREEN}✓ Helm repositories added and updated${NC}"
 
 # Install NGINX Ingress Controller
 echo -e "\n${BLUE}Installing NGINX Ingress Controller...${NC}"
-helm install ingress-nginx ingress-nginx/ingress-nginx \
+# Disable admission webhooks to avoid installation failures
+# Schedule on control plane to avoid worker node connectivity issues
+if helm install ingress-nginx ingress-nginx/ingress-nginx \
   --namespace ingress-nginx \
-  -f ../k8s/helm/ingress-nginx/values.yaml
-echo -e "${YELLOW}Waiting for NGINX Ingress Controller to be ready...${NC}"
-kubectl wait --namespace ingress-nginx \
-  --for=condition=ready pod \
-  --selector=app.kubernetes.io/component=controller \
-  --timeout=120s || true
-echo -e "${GREEN}✓ NGINX Ingress Controller installed${NC}"
+  -f ../k8s/helm/ingress-nginx/values.yaml \
+  --set controller.admissionWebhooks.enabled=false \
+  --set controller.nodeSelector."kubernetes\.io/hostname"=spaceship \
+  --wait --timeout=3m; then
+  echo -e "${GREEN}✓ NGINX Ingress Controller installed successfully${NC}"
+else
+  echo -e "${RED}✗ NGINX Ingress Controller installation had issues${NC}"
+  echo -e "${YELLOW}Checking status...${NC}"
+  kubectl get pods -n ingress-nginx
+  echo -e "${YELLOW}Continuing with installation...${NC}"
+fi
+
+# Verify the controller is running
+if kubectl get deployment -n ingress-nginx ingress-nginx-controller &>/dev/null; then
+  echo -e "${GREEN}✓ Ingress controller deployment exists${NC}"
+else
+  echo -e "${RED}✗ Ingress controller deployment not found${NC}"
+fi
 
 # Get the External IP of the NGINX Ingress Controller
 echo -e "\n${YELLOW}Getting External IP of NGINX Ingress Controller...${NC}"
@@ -178,15 +191,17 @@ fi
 
 # Install Prometheus Stack
 echo -e "\n${BLUE}Installing Prometheus Stack...${NC}"
-helm install prometheus prometheus-community/kube-prometheus-stack \
+if helm install prometheus prometheus-community/kube-prometheus-stack \
   --namespace monitoring \
-  -f ../k8s/helm/prometheus/values.yaml
-echo -e "${YELLOW}Waiting for Prometheus resources to be created...${NC}"
-kubectl wait --namespace monitoring \
-  --for=condition=ready pod \
-  --selector=app=prometheus \
-  --timeout=120s || true
-echo -e "${GREEN}✓ Prometheus Stack installed${NC}"
+  -f ../k8s/helm/prometheus/values.yaml \
+  --wait --timeout=5m; then
+  echo -e "${GREEN}✓ Prometheus Stack installed successfully${NC}"
+else
+  echo -e "${RED}✗ Prometheus Stack installation had issues${NC}"
+  echo -e "${YELLOW}Checking status...${NC}"
+  kubectl get pods -n monitoring
+  echo -e "${YELLOW}The installation may still be in progress. Check with: kubectl get pods -n monitoring${NC}"
+fi
 
 # Verify the deployment
 echo -e "\n${BLUE}Verifying deployment...${NC}"
