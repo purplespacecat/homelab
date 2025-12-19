@@ -49,7 +49,8 @@ apt-get install -y \
     lsb-release \
     socat \
     conntrack \
-    ipset
+    ipset \
+    nfs-common
 
 # ========================================
 # 2. Disable Swap

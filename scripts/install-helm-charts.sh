@@ -64,15 +64,59 @@ kubectl apply -f ../k8s/core/namespaces/ingress-nginx-namespace.yaml
 
 # Install MetalLB
 echo -e "\n${BLUE}Installing MetalLB...${NC}"
-echo -e "${YELLOW}Applying MetalLB manifests...${NC}"
-kubectl apply -f https://raw.githubusercontent.com/metallb/metallb-operator/v0.13.12/config/manifests/metallb-native.yaml
-echo -e "${YELLOW}Waiting for MetalLB resources to be created...${NC}"
-kubectl wait --namespace metallb-system \
+METALLB_VERSION="v0.14.9"
+echo -e "${YELLOW}Applying MetalLB manifests (${METALLB_VERSION})...${NC}"
+if kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/${METALLB_VERSION}/config/manifests/metallb-native.yaml; then
+    echo -e "${GREEN}✓ MetalLB manifests applied${NC}"
+else
+    echo -e "${RED}✗ Failed to apply MetalLB manifests${NC}"
+    echo -e "${YELLOW}Check if the URL is accessible and the version is correct${NC}"
+    exit 1
+fi
+
+# Create memberlist secret if it doesn't exist (required for MetalLB speaker nodes)
+echo -e "${YELLOW}Creating MetalLB memberlist secret...${NC}"
+if ! kubectl get secret memberlist -n metallb-system &>/dev/null; then
+    kubectl create secret generic -n metallb-system memberlist --from-literal=secretkey="$(openssl rand -base64 128)"
+    echo -e "${GREEN}✓ Memberlist secret created${NC}"
+else
+    echo -e "${GREEN}✓ Memberlist secret already exists${NC}"
+fi
+
+echo -e "${YELLOW}Waiting for MetalLB controller to be ready...${NC}"
+if kubectl wait --namespace metallb-system \
   --for=condition=ready pod \
-  --selector=app=metallb \
-  --timeout=90s || true
+  --selector=app=metallb,component=controller \
+  --timeout=120s; then
+    echo -e "${GREEN}✓ MetalLB controller is ready${NC}"
+else
+    echo -e "${RED}✗ MetalLB controller failed to become ready${NC}"
+    echo -e "${YELLOW}Checking pod status...${NC}"
+    kubectl get pods -n metallb-system
+    kubectl describe pods -n metallb-system
+fi
+
+echo -e "${YELLOW}Waiting for MetalLB speaker to be ready...${NC}"
+if kubectl wait --namespace metallb-system \
+  --for=condition=ready pod \
+  --selector=app=metallb,component=speaker \
+  --timeout=120s; then
+    echo -e "${GREEN}✓ MetalLB speaker is ready${NC}"
+else
+    echo -e "${YELLOW}⚠ MetalLB speaker may still be starting${NC}"
+fi
+
 echo -e "${YELLOW}Applying MetalLB configuration...${NC}"
-kubectl apply -f ../k8s/core/networking/metallb-config.yaml
+# Wait a bit for CRDs to be fully established
+sleep 5
+if kubectl apply -f ../k8s/core/networking/metallb-config.yaml; then
+    echo -e "${GREEN}✓ MetalLB configuration applied${NC}"
+else
+    echo -e "${RED}✗ Failed to apply MetalLB configuration${NC}"
+    echo -e "${YELLOW}This might be a CRD timing issue. Retrying in 10 seconds...${NC}"
+    sleep 10
+    kubectl apply -f ../k8s/core/networking/metallb-config.yaml
+fi
 echo -e "${GREEN}✓ MetalLB installed${NC}"
 
 # Setup storage for monitoring stack
@@ -95,15 +139,28 @@ echo -e "${GREEN}✓ Helm repositories added and updated${NC}"
 
 # Install NGINX Ingress Controller
 echo -e "\n${BLUE}Installing NGINX Ingress Controller...${NC}"
-helm install ingress-nginx ingress-nginx/ingress-nginx \
+# Disable admission webhooks to avoid installation failures
+# Schedule on control plane to avoid worker node connectivity issues
+if helm install ingress-nginx ingress-nginx/ingress-nginx \
   --namespace ingress-nginx \
-  -f ../k8s/helm/ingress-nginx/values.yaml
-echo -e "${YELLOW}Waiting for NGINX Ingress Controller to be ready...${NC}"
-kubectl wait --namespace ingress-nginx \
-  --for=condition=ready pod \
-  --selector=app.kubernetes.io/component=controller \
-  --timeout=120s || true
-echo -e "${GREEN}✓ NGINX Ingress Controller installed${NC}"
+  -f ../k8s/helm/ingress-nginx/values.yaml \
+  --set controller.admissionWebhooks.enabled=false \
+  --set controller.nodeSelector."kubernetes\.io/hostname"=spaceship \
+  --wait --timeout=3m; then
+  echo -e "${GREEN}✓ NGINX Ingress Controller installed successfully${NC}"
+else
+  echo -e "${RED}✗ NGINX Ingress Controller installation had issues${NC}"
+  echo -e "${YELLOW}Checking status...${NC}"
+  kubectl get pods -n ingress-nginx
+  echo -e "${YELLOW}Continuing with installation...${NC}"
+fi
+
+# Verify the controller is running
+if kubectl get deployment -n ingress-nginx ingress-nginx-controller &>/dev/null; then
+  echo -e "${GREEN}✓ Ingress controller deployment exists${NC}"
+else
+  echo -e "${RED}✗ Ingress controller deployment not found${NC}"
+fi
 
 # Get the External IP of the NGINX Ingress Controller
 echo -e "\n${YELLOW}Getting External IP of NGINX Ingress Controller...${NC}"
@@ -134,15 +191,17 @@ fi
 
 # Install Prometheus Stack
 echo -e "\n${BLUE}Installing Prometheus Stack...${NC}"
-helm install prometheus prometheus-community/kube-prometheus-stack \
+if helm install prometheus prometheus-community/kube-prometheus-stack \
   --namespace monitoring \
-  -f ../k8s/helm/prometheus/values.yaml
-echo -e "${YELLOW}Waiting for Prometheus resources to be created...${NC}"
-kubectl wait --namespace monitoring \
-  --for=condition=ready pod \
-  --selector=app=prometheus \
-  --timeout=120s || true
-echo -e "${GREEN}✓ Prometheus Stack installed${NC}"
+  -f ../k8s/helm/prometheus/values.yaml \
+  --wait --timeout=5m; then
+  echo -e "${GREEN}✓ Prometheus Stack installed successfully${NC}"
+else
+  echo -e "${RED}✗ Prometheus Stack installation had issues${NC}"
+  echo -e "${YELLOW}Checking status...${NC}"
+  kubectl get pods -n monitoring
+  echo -e "${YELLOW}The installation may still be in progress. Check with: kubectl get pods -n monitoring${NC}"
+fi
 
 # Verify the deployment
 echo -e "\n${BLUE}Verifying deployment...${NC}"

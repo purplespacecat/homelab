@@ -1,6 +1,12 @@
 #!/bin/bash
 # Script to verify NFS server setup and troubleshoot issues
-# Can be run from any machine that should access the NFS server
+#
+# RECOMMENDED: Run this script directly ON the NFS server for complete checks
+# Can also be run from remote machines, but some checks will require SSH access
+#
+# Usage: ./verify-nfs-setup.sh [NFS_SERVER_IP]
+# Example: ./verify-nfs-setup.sh 192.168.100.98
+#          (If run on the NFS server itself, IP should match local IP)
 
 set -e
 
@@ -29,19 +35,38 @@ else
     ERRORS=$((ERRORS + 1))
 fi
 
-# Test 2: SSH connectivity (if running remotely)
-echo -e "\n${YELLOW}[2/7] Testing SSH connectivity...${NC}"
-if ssh -o ConnectTimeout=5 -o StrictHostKeyChecking=no "$NFS_SERVER" "exit" 2>/dev/null; then
-    echo -e "${GREEN}✓ SSH connectivity OK${NC}"
-    HAS_SSH=true
+# Test 2: Check if running on the NFS server itself
+echo -e "\n${YELLOW}[2/7] Checking execution context...${NC}"
+LOCAL_IP=$(hostname -I 2>/dev/null | awk '{print $1}')
+if [ "$LOCAL_IP" = "$NFS_SERVER" ]; then
+    echo -e "${GREEN}✓ Running on NFS server (local mode)${NC}"
+    IS_LOCAL=true
 else
-    echo -e "${YELLOW}⚠ Cannot SSH to $NFS_SERVER (may not be needed)${NC}"
-    HAS_SSH=false
+    echo -e "${YELLOW}⚠ Running from remote machine ($LOCAL_IP)${NC}"
+    IS_LOCAL=false
+    # Test SSH connectivity for remote checks
+    if ssh -o ConnectTimeout=5 -o StrictHostKeyChecking=no "$NFS_SERVER" "exit" 2>/dev/null; then
+        echo -e "${GREEN}✓ SSH connectivity OK${NC}"
+        HAS_SSH=true
+    else
+        echo -e "${YELLOW}⚠ Cannot SSH to $NFS_SERVER${NC}"
+        HAS_SSH=false
+    fi
 fi
 
-# Test 3: NFS server status (requires SSH)
-if [ "$HAS_SSH" = true ]; then
-    echo -e "\n${YELLOW}[3/7] Checking NFS server status...${NC}"
+# Test 3: NFS server status
+echo -e "\n${YELLOW}[3/7] Checking NFS server status...${NC}"
+if [ "$IS_LOCAL" = true ]; then
+    # Local check - can check directly
+    if systemctl is-active --quiet nfs-kernel-server; then
+        echo -e "${GREEN}✓ NFS server is running${NC}"
+    else
+        echo -e "${RED}✗ NFS server is not running${NC}"
+        echo -e "${YELLOW}  Try: sudo systemctl start nfs-kernel-server${NC}"
+        ERRORS=$((ERRORS + 1))
+    fi
+elif [ "$HAS_SSH" = true ]; then
+    # Remote check via SSH
     if ssh "$NFS_SERVER" "sudo systemctl is-active --quiet nfs-kernel-server" 2>/dev/null; then
         echo -e "${GREEN}✓ NFS server is running${NC}"
     else
@@ -50,7 +75,7 @@ if [ "$HAS_SSH" = true ]; then
         ERRORS=$((ERRORS + 1))
     fi
 else
-    echo -e "\n${YELLOW}[3/7] Skipping NFS server status check (no SSH)${NC}"
+    echo -e "${YELLOW}⚠ Cannot check NFS server status (no local or SSH access)${NC}"
 fi
 
 # Test 4: Check for NFS client tools
@@ -91,7 +116,13 @@ echo -e "\n${YELLOW}[6/7] Testing NFS mount...${NC}"
 TEST_DIR="/tmp/nfs-test-$$"
 mkdir -p "$TEST_DIR"
 
-if sudo mount -t nfs -o soft,timeo=10 "$NFS_SERVER:/data" "$TEST_DIR" 2>/dev/null; then
+# Check if we can use sudo
+if ! sudo -n true 2>/dev/null; then
+    echo -e "${YELLOW}⚠ Cannot test mount (sudo password required)${NC}"
+    echo -e "${YELLOW}  To test mounting manually, run:${NC}"
+    echo -e "${YELLOW}  sudo mount -t nfs $NFS_SERVER:/data $TEST_DIR${NC}"
+    rmdir "$TEST_DIR" 2>/dev/null || true
+elif sudo mount -t nfs -o soft,timeo=10 "$NFS_SERVER:/data" "$TEST_DIR" 2>/dev/null; then
     echo -e "${GREEN}✓ Successfully mounted $NFS_SERVER:/data${NC}"
 
     # Try to write a test file
@@ -100,21 +131,31 @@ if sudo mount -t nfs -o soft,timeo=10 "$NFS_SERVER:/data" "$TEST_DIR" 2>/dev/nul
         sudo rm "$TEST_DIR/test-write-$$" 2>/dev/null || true
     else
         echo -e "${RED}✗ Cannot write to NFS mount${NC}"
-        echo -e "${YELLOW}  Check permissions on NFS server: ssh $NFS_SERVER 'ls -la /data'${NC}"
+        if [ "$IS_LOCAL" = true ]; then
+            echo -e "${YELLOW}  Check permissions: ls -la /data${NC}"
+        else
+            echo -e "${YELLOW}  Check permissions: ssh $NFS_SERVER 'ls -la /data'${NC}"
+        fi
         ERRORS=$((ERRORS + 1))
     fi
 
     sudo umount "$TEST_DIR" 2>/dev/null || true
+    rmdir "$TEST_DIR" 2>/dev/null || true
 else
     echo -e "${RED}✗ Cannot mount $NFS_SERVER:/data${NC}"
     echo -e "${YELLOW}  Possible issues:${NC}"
-    echo -e "${YELLOW}  - NFS server not exporting /data${NC}"
+    echo -e "${YELLOW}  - NFS server not exporting /data properly${NC}"
     echo -e "${YELLOW}  - Firewall blocking NFS ports (111, 2049)${NC}"
-    echo -e "${YELLOW}  - Mount permissions${NC}"
+    echo -e "${YELLOW}  - RPC services not running${NC}"
+    if [ "$IS_LOCAL" = true ]; then
+        echo -e "${YELLOW}  Check logs: sudo journalctl -u nfs-kernel-server -n 20${NC}"
+        echo -e "${YELLOW}  Verify exports: sudo exportfs -v${NC}"
+    else
+        echo -e "${YELLOW}  Check logs: ssh $NFS_SERVER 'sudo journalctl -u nfs-kernel-server -n 20'${NC}"
+    fi
     ERRORS=$((ERRORS + 1))
+    rmdir "$TEST_DIR" 2>/dev/null || true
 fi
-
-rmdir "$TEST_DIR" 2>/dev/null || true
 
 # Test 7: Check Kubernetes NFS provisioner (if kubectl available)
 echo -e "\n${YELLOW}[7/7] Checking Kubernetes NFS provisioner...${NC}"
@@ -153,20 +194,45 @@ if [ $ERRORS -eq 0 ]; then
 else
     echo -e "${RED}✗ Found $ERRORS issue(s) that need attention.${NC}"
     echo -e "\n${YELLOW}Common fixes:${NC}"
-    echo -e "  1. Reinstall/reconfigure NFS server:"
-    echo -e "     ${BLUE}./scripts/setup-nfs-server.sh $NFS_SERVER${NC}"
-    echo -e ""
-    echo -e "  2. Check NFS server logs:"
-    echo -e "     ${BLUE}ssh $NFS_SERVER 'sudo journalctl -u nfs-kernel-server -n 50'${NC}"
-    echo -e ""
-    echo -e "  3. Check firewall on NFS server:"
-    echo -e "     ${BLUE}ssh $NFS_SERVER 'sudo ufw status'${NC}"
-    echo -e ""
-    echo -e "  4. Verify exports file:"
-    echo -e "     ${BLUE}ssh $NFS_SERVER 'cat /etc/exports'${NC}"
-    echo -e ""
-    echo -e "  5. Restart NFS server:"
-    echo -e "     ${BLUE}ssh $NFS_SERVER 'sudo systemctl restart nfs-kernel-server'${NC}"
+
+    if [ "$IS_LOCAL" = true ]; then
+        echo -e "  1. Reinstall/reconfigure NFS server (run on this server):"
+        echo -e "     ${BLUE}sudo ./scripts/setup-nfs-server.sh${NC}"
+        echo -e ""
+        echo -e "  2. Check NFS server logs:"
+        echo -e "     ${BLUE}sudo journalctl -u nfs-kernel-server -n 50${NC}"
+        echo -e ""
+        echo -e "  3. Check firewall:"
+        echo -e "     ${BLUE}sudo ufw status${NC}"
+        echo -e ""
+        echo -e "  4. Verify exports file:"
+        echo -e "     ${BLUE}cat /etc/exports${NC}"
+        echo -e "     ${BLUE}sudo exportfs -v${NC}"
+        echo -e ""
+        echo -e "  5. Restart NFS server:"
+        echo -e "     ${BLUE}sudo systemctl restart nfs-kernel-server${NC}"
+        echo -e ""
+        echo -e "  6. Reapply exports:"
+        echo -e "     ${BLUE}sudo exportfs -ra${NC}"
+    else
+        echo -e "  1. Run verification ON the NFS server ($NFS_SERVER):"
+        echo -e "     ${BLUE}ssh $NFS_SERVER 'cd /path/to/scripts && ./verify-nfs-setup.sh $NFS_SERVER'${NC}"
+        echo -e ""
+        echo -e "  2. Reinstall/reconfigure NFS server (run ON the server):"
+        echo -e "     ${BLUE}ssh $NFS_SERVER 'cd /path/to/scripts && sudo ./setup-nfs-server.sh'${NC}"
+        echo -e ""
+        echo -e "  3. Check NFS server logs:"
+        echo -e "     ${BLUE}ssh $NFS_SERVER 'sudo journalctl -u nfs-kernel-server -n 50'${NC}"
+        echo -e ""
+        echo -e "  4. Check firewall on NFS server:"
+        echo -e "     ${BLUE}ssh $NFS_SERVER 'sudo ufw status'${NC}"
+        echo -e ""
+        echo -e "  5. Verify exports file:"
+        echo -e "     ${BLUE}ssh $NFS_SERVER 'cat /etc/exports && sudo exportfs -v'${NC}"
+        echo -e ""
+        echo -e "  6. Restart NFS server:"
+        echo -e "     ${BLUE}ssh $NFS_SERVER 'sudo systemctl restart nfs-kernel-server'${NC}"
+    fi
 fi
 echo -e "${BLUE}========================================================${NC}"
 
