@@ -64,15 +64,59 @@ kubectl apply -f ../k8s/core/namespaces/ingress-nginx-namespace.yaml
 
 # Install MetalLB
 echo -e "\n${BLUE}Installing MetalLB...${NC}"
-echo -e "${YELLOW}Applying MetalLB manifests...${NC}"
-kubectl apply -f https://raw.githubusercontent.com/metallb/metallb-operator/v0.13.12/config/manifests/metallb-native.yaml
-echo -e "${YELLOW}Waiting for MetalLB resources to be created...${NC}"
-kubectl wait --namespace metallb-system \
+METALLB_VERSION="v0.14.9"
+echo -e "${YELLOW}Applying MetalLB manifests (${METALLB_VERSION})...${NC}"
+if kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/${METALLB_VERSION}/config/manifests/metallb-native.yaml; then
+    echo -e "${GREEN}✓ MetalLB manifests applied${NC}"
+else
+    echo -e "${RED}✗ Failed to apply MetalLB manifests${NC}"
+    echo -e "${YELLOW}Check if the URL is accessible and the version is correct${NC}"
+    exit 1
+fi
+
+# Create memberlist secret if it doesn't exist (required for MetalLB speaker nodes)
+echo -e "${YELLOW}Creating MetalLB memberlist secret...${NC}"
+if ! kubectl get secret memberlist -n metallb-system &>/dev/null; then
+    kubectl create secret generic -n metallb-system memberlist --from-literal=secretkey="$(openssl rand -base64 128)"
+    echo -e "${GREEN}✓ Memberlist secret created${NC}"
+else
+    echo -e "${GREEN}✓ Memberlist secret already exists${NC}"
+fi
+
+echo -e "${YELLOW}Waiting for MetalLB controller to be ready...${NC}"
+if kubectl wait --namespace metallb-system \
   --for=condition=ready pod \
-  --selector=app=metallb \
-  --timeout=90s || true
+  --selector=app=metallb,component=controller \
+  --timeout=120s; then
+    echo -e "${GREEN}✓ MetalLB controller is ready${NC}"
+else
+    echo -e "${RED}✗ MetalLB controller failed to become ready${NC}"
+    echo -e "${YELLOW}Checking pod status...${NC}"
+    kubectl get pods -n metallb-system
+    kubectl describe pods -n metallb-system
+fi
+
+echo -e "${YELLOW}Waiting for MetalLB speaker to be ready...${NC}"
+if kubectl wait --namespace metallb-system \
+  --for=condition=ready pod \
+  --selector=app=metallb,component=speaker \
+  --timeout=120s; then
+    echo -e "${GREEN}✓ MetalLB speaker is ready${NC}"
+else
+    echo -e "${YELLOW}⚠ MetalLB speaker may still be starting${NC}"
+fi
+
 echo -e "${YELLOW}Applying MetalLB configuration...${NC}"
-kubectl apply -f ../k8s/core/networking/metallb-config.yaml
+# Wait a bit for CRDs to be fully established
+sleep 5
+if kubectl apply -f ../k8s/core/networking/metallb-config.yaml; then
+    echo -e "${GREEN}✓ MetalLB configuration applied${NC}"
+else
+    echo -e "${RED}✗ Failed to apply MetalLB configuration${NC}"
+    echo -e "${YELLOW}This might be a CRD timing issue. Retrying in 10 seconds...${NC}"
+    sleep 10
+    kubectl apply -f ../k8s/core/networking/metallb-config.yaml
+fi
 echo -e "${GREEN}✓ MetalLB installed${NC}"
 
 # Setup storage for monitoring stack
