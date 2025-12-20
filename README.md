@@ -152,6 +152,27 @@ Apply: `kubectl apply -f k8s/core/networking/metallb-config.yaml`
 kubectl get svc -n ingress-nginx ingress-nginx-controller
 ```
 
+**Accessing Services**:
+
+Services can be accessed via nip.io domains (e.g., `http://prometheus.192.168.100.200.nip.io`).
+
+If nip.io doesn't work on Windows or your network, add entries to your hosts file:
+
+**Windows**: Edit `C:\Windows\System32\drivers\etc\hosts` (as Administrator)
+```
+192.168.100.200 prometheus.local grafana.local alertmanager.local
+```
+
+**Linux/Mac**: Edit `/etc/hosts` (with sudo)
+```
+192.168.100.200 prometheus.local grafana.local alertmanager.local
+```
+
+Then access services via:
+- `http://prometheus.local`
+- `http://grafana.local`
+- `http://alertmanager.local`
+
 **Create an Ingress** (example):
 ```yaml
 apiVersion: networking.k8s.io/v1
@@ -161,7 +182,7 @@ metadata:
   namespace: my-namespace
 spec:
   rules:
-  - host: myservice.<INGRESS_IP>.nip.io
+  - host: myservice.<INGRESS_IP>.nip.io  # or myservice.local if using hosts file
     http:
       paths:
       - path: /
