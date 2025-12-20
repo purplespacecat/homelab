@@ -193,6 +193,43 @@ To avoid certificate warnings when using the homelab CA:
    - **Mac**: Double-click → Add to Keychain → Set to "Always Trust"
    - **Linux**: Copy to `/usr/local/share/ca-certificates/` and run `sudo update-ca-certificates`
 
+**Enable HTTPS for Prometheus Stack**:
+
+After installing cert-manager, update the Prometheus values to enable TLS:
+
+```bash
+# Edit the values file
+vi k8s/helm/prometheus/values.yaml
+```
+
+For each ingress section (prometheus, grafana, alertmanager), add the cert-manager annotation and TLS configuration:
+
+```yaml
+prometheus:
+  ingress:
+    enabled: true
+    ingressClassName: nginx
+    annotations:
+      cert-manager.io/cluster-issuer: "homelab-ca-issuer"
+      nginx.ingress.kubernetes.io/ssl-redirect: "true"  # Change from "false" to "true"
+    hosts:
+      - "prometheus.192.168.100.200.nip.io"
+    paths:
+      - "/"
+    pathType: Prefix
+    tls:  # Add this section
+      - secretName: prometheus-tls
+        hosts:
+          - "prometheus.192.168.100.200.nip.io"
+```
+
+Apply the changes:
+```bash
+helm upgrade prometheus prometheus-community/kube-prometheus-stack \
+  -n monitoring \
+  -f k8s/helm/prometheus/values.yaml
+```
+
 **Manual Installation**:
 ```bash
 ./scripts/install-cert-manager.sh
