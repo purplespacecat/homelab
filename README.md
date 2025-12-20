@@ -19,15 +19,13 @@ This repo contains files and scripts for a Kubernetes homelab running on **kubea
 ## Available Scripts
 
 ### Cluster Setup & Management
-- **setup-kubeadm-cluster.sh** - Complete Kubernetes cluster setup (master or worker)
-- **prepare-worker-node.sh** - Prepare a worker node for joining the cluster
+- **setup-master-node.sh** - Complete master/control-plane setup (K8s + CNI + firewall)
+- **setup-worker-node.sh** - Complete worker node setup (K8s + NFS client + firewall)
 - **join-worker-node.sh** - Join a worker node to the cluster
 - **teardown-kubeadm-cluster.sh** - Completely remove Kubernetes cluster
 
 ### Network Configuration
-- **install-calico.sh** - Install Calico CNI plugin
-- **fix-master-node-firewall.sh** - Open required ports on master node (HTTP/HTTPS/MetalLB)
-- **fix-worker-node-firewall.sh** - Open required ports on worker nodes (Kubelet/NodePort)
+- **install-calico.sh** - Install Calico CNI plugin (standalone)
 
 ### Storage & NFS
 - **setup-nfs-server.sh** - Setup NFS server locally
@@ -48,28 +46,22 @@ This repo contains files and scripts for a Kubernetes homelab running on **kubea
 - **extract-ca-cert.sh** - Extract cluster CA certificate
 - **setup-remote-host.sh** - Setup remote host for cluster operations
 
-### Script Consolidation Recommendations
+### Consolidated Scripts
 
-The following scripts can be combined for a more streamlined workflow:
+The following scripts have been consolidated for streamlined workflows:
 
-**Worker Node Setup (Recommended)**
-Combine these into a single `setup-worker-node.sh`:
-- `prepare-worker-node.sh` - Base installation
-- `fix-worker-node-firewall.sh` - Firewall configuration
-- `fix-worker-nfs-client.sh` - NFS client setup
+**✓ setup-master-node.sh** - All-in-one master node setup including:
+- Kubernetes components (kubeadm, kubelet, kubectl)
+- Container runtime (containerd)
+- CNI plugin installation (Calico by default)
+- Firewall configuration (HTTP/HTTPS/MetalLB ports)
+- Cluster initialization
 
-This would provide a single script that fully prepares a worker node with all requirements.
-
-**Master Node Setup (Recommended)**
-Combine `setup-kubeadm-cluster.sh` with `fix-master-node-firewall.sh` for a single master node setup script that handles both cluster initialization and firewall configuration.
-
-**Complete NFS Setup (Optional)**
-For simpler NFS deployments, consider combining:
-- `setup-nfs-server.sh` / `setup-nfs-server-remote.sh`
-- `verify-nfs-setup.sh`
-- `install-nfs-provisioner.sh`
-
-Into a single `setup-complete-nfs.sh` script.
+**✓ setup-worker-node.sh** - All-in-one worker node setup including:
+- Kubernetes components (kubeadm, kubelet, kubectl)
+- Container runtime (containerd)
+- NFS client (nfs-common)
+- Firewall configuration (Kubelet/NodePort ranges)
 
 ## Quick Start
 
@@ -77,10 +69,9 @@ Into a single `setup-complete-nfs.sh` script.
 
 Before installing the application stack, ensure your Kubernetes cluster is set up:
 
-1. **Master Node Setup**: Run `./scripts/setup-kubeadm-cluster.sh` with `CONTROL_PLANE=true`
-2. **Worker Node Setup**: Run `./scripts/prepare-worker-node.sh` on each worker, then join using `./scripts/join-worker-node.sh`
-3. **Configure Firewall**: Run firewall scripts on master and worker nodes as needed (see Available Scripts section)
-4. **Setup NFS Storage**: Run `./scripts/setup-nfs-server.sh` on your NFS host
+1. **Master Node Setup**: Run `sudo ./scripts/setup-master-node.sh` on your master node
+2. **Worker Node Setup**: Run `sudo ./scripts/setup-worker-node.sh` on each worker, then join using `./scripts/join-worker-node.sh`
+3. **Setup NFS Storage**: Run `./scripts/setup-nfs-server.sh` on your NFS host (or `setup-nfs-server-remote.sh` for remote hosts)
 
 ### Complete Application Stack Installation
 
