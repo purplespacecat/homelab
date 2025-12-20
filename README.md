@@ -321,6 +321,124 @@ Use `type: LoadBalancer` services to get dedicated IPs for databases, message br
 - **Node NotReady**: Verify firewall rules allow required Kubernetes ports
 - **CNI issues**: Check Calico pods in `kube-system` namespace
 
+## Architecture & Workflows
+
+### Networking Flow
+
+This homelab uses a multi-layer networking approach:
+
+```
+[External Device] → [MetalLB LoadBalancer IP] → [NGINX Ingress Controller] → [Service] → [Pod]
+```
+
+**Detailed Flow**:
+1. **External Access**: User accesses `http://grafana.192.168.100.200.nip.io`
+2. **DNS Resolution**: nip.io resolves to `192.168.100.200` (or use hosts file)
+3. **MetalLB**: Assigns `192.168.100.200` from the IP pool to the NGINX Ingress service (type: LoadBalancer)
+4. **NGINX Ingress**: Routes traffic based on hostname to the appropriate backend service
+5. **Kubernetes Service**: Load balances across pod replicas
+6. **Pod**: Handles the request (e.g., Grafana pod)
+
+**Key Configuration Points**:
+- MetalLB IP pool: `k8s/core/networking/metallb-config.yaml` (must match your network segment)
+- Ingress rules: Defined in Helm values (e.g., `k8s/helm/prometheus/values.yaml`)
+- Service endpoints: Automatically managed by Kubernetes
+
+### Helm Workflow
+
+The homelab uses Helm for managing applications. Here's how it works:
+
+**Installation Flow** (`./scripts/install-helm-charts.sh`):
+1. Install/verify Helm is present
+2. Create namespaces (`monitoring`, `ingress-nginx`)
+3. Install MetalLB (raw manifests, not Helm)
+4. Add Helm repositories (ingress-nginx, prometheus-community)
+5. Install NGINX Ingress Controller (Helm chart)
+6. Auto-update Prometheus values.yaml with detected external IP
+7. Install Prometheus Stack (Helm chart)
+
+**Helm Releases** (managed via Helm):
+- `ingress-nginx` (namespace: `ingress-nginx`)
+- `prometheus` (namespace: `monitoring`)
+- `cert-manager` (namespace: `cert-manager`) - if installed
+
+**Updating a Helm Release**:
+```bash
+# Edit values file
+vi k8s/helm/prometheus/values.yaml
+
+# Apply changes
+helm upgrade prometheus prometheus-community/kube-prometheus-stack \
+  -n monitoring \
+  -f k8s/helm/prometheus/values.yaml
+```
+
+**Checking Helm Releases**:
+```bash
+helm list -A  # List all releases across all namespaces
+helm status prometheus -n monitoring  # Check specific release
+```
+
+### Disaster Recovery & Cluster Rebuild
+
+If your cluster goes down, rebuild it from this repository:
+
+**Full Cluster Rebuild Steps**:
+
+1. **Rebuild Master Node**:
+   ```bash
+   sudo ./scripts/setup-master-node.sh
+   # Configurable: KUBERNETES_VERSION, POD_NETWORK_CIDR, CNI_PLUGIN
+   ```
+
+2. **Rebuild Worker Nodes**:
+   ```bash
+   # On each worker node
+   sudo ./scripts/setup-worker-node.sh
+
+   # Join to cluster (get join command from master)
+   sudo kubeadm join <master-ip>:6443 --token <token> \
+     --discovery-token-ca-cert-hash sha256:<hash>
+   ```
+
+3. **Setup NFS Storage** (if NFS server also went down):
+   ```bash
+   ./scripts/setup-nfs-server.sh  # or setup-nfs-server-remote.sh
+   ```
+
+4. **Install Application Stack**:
+   ```bash
+   ./scripts/install-helm-charts.sh
+   ```
+
+5. **Restore Custom Configurations**:
+   - Update MetalLB IP pool if needed: `kubectl apply -f k8s/core/networking/metallb-config.yaml`
+   - Update email for Let's Encrypt: `kubectl edit clusterissuer homelab-issuer`
+   - Apply any custom application deployments from `k8s/applications/`
+
+**What You Need to Backup Separately**:
+- Grafana dashboards (if customized)
+- Prometheus alerting rules (if customized)
+- Persistent data on NFS server (`/data/*`)
+- Any secrets not in this repo
+- Custom application configurations
+
+**Critical Files to Preserve**:
+- `k8s/core/networking/metallb-config.yaml` - Your IP pool configuration
+- `k8s/helm/*/values.yaml` - Customized Helm values
+- `k8s/cert-manager/cert-manager-issuers.yaml` - Certificate issuer email
+
+### Configuration Checklist
+
+Before deploying, ensure these are configured for your environment:
+
+- [ ] **MetalLB IP Pool**: Update `k8s/core/networking/metallb-config.yaml` with your network IPs
+- [ ] **MetalLB Interface**: Update `interfaces` in metallb-config.yaml (currently: `wlp2s0`)
+- [ ] **NFS Server IP**: Used in storage and provisioner scripts (currently: `192.168.100.98`)
+- [ ] **Firewall Network Range**: Update `192.168.100.0/24` in firewall scripts if different
+- [ ] **Let's Encrypt Email**: Update in `k8s/cert-manager/cert-manager-issuers.yaml`
+- [ ] **Prometheus Hosts**: Update nip.io IPs in `k8s/helm/prometheus/values.yaml`
+
 ## Important Notes
 
 - **Default Credentials**: Grafana default is `admin/admin` - change in production
@@ -328,3 +446,4 @@ Use `type: LoadBalancer` services to get dedicated IPs for databases, message br
 - **Firewall**: Ensure ports 80/443 are open on master node for external access
 - **nip.io**: Free DNS service; consider proper DNS for production
 - **IP Ranges**: Adjust MetalLB IP range to avoid conflicts with your network DHCP
+- **Version Control**: Keep this repository updated with your configuration changes
