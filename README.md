@@ -128,6 +128,76 @@ helm upgrade prometheus prometheus-community/kube-prometheus-stack \
   -f k8s/helm/prometheus/values.yaml
 ```
 
+### TLS/HTTPS Setup with Cert-Manager (Optional)
+
+Cert-manager is installed automatically with `./scripts/install-helm-charts.sh` and provides TLS certificate management.
+
+**Available Certificate Issuers**:
+
+1. **selfsigned-ca-issuer** - Self-signed root CA (for development)
+2. **homelab-ca-issuer** - Homelab CA issuer (for internal certificates)
+3. **homelab-issuer** - Let's Encrypt issuer (for public certificates)
+
+**Enable HTTPS on an Ingress**:
+
+Add the following annotation and tls section to your Ingress resource:
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: my-service-ingress
+  namespace: my-namespace
+  annotations:
+    cert-manager.io/cluster-issuer: "homelab-ca-issuer"  # or "homelab-issuer" for Let's Encrypt
+spec:
+  tls:
+  - hosts:
+    - myservice.192.168.100.200.nip.io
+    secretName: myservice-tls  # cert-manager will create this secret
+  rules:
+  - host: myservice.192.168.100.200.nip.io
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: my-service
+            port:
+              number: 80
+```
+
+**Update Let's Encrypt Email** (if using homelab-issuer):
+```bash
+kubectl edit clusterissuer homelab-issuer
+# Update the email field in spec.acme.email
+```
+
+**Verify Certificate Issuers**:
+```bash
+kubectl get clusterissuers
+```
+
+**Trust the Homelab CA Certificate** (for browsers):
+
+To avoid certificate warnings when using the homelab CA:
+
+1. Extract the CA certificate:
+   ```bash
+   ./scripts/extract-ca-cert.sh
+   ```
+
+2. Import `homelab-ca.crt` into your browser or system trust store:
+   - **Windows**: Double-click → Install Certificate → Place in "Trusted Root Certification Authorities"
+   - **Mac**: Double-click → Add to Keychain → Set to "Always Trust"
+   - **Linux**: Copy to `/usr/local/share/ca-certificates/` and run `sudo update-ca-certificates`
+
+**Manual Installation**:
+```bash
+./scripts/install-cert-manager.sh
+```
+
 ### Exposing Services to Local Network
 
 Services are exposed using MetalLB + NGINX Ingress Controller + nip.io DNS.
