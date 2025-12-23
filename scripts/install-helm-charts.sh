@@ -133,6 +133,8 @@ echo -e "${YELLOW}Adding ingress-nginx repository...${NC}"
 helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
 echo -e "${YELLOW}Adding prometheus-community repository...${NC}"
 helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+echo -e "${YELLOW}Adding grafana repository...${NC}"
+helm repo add grafana https://grafana.github.io/helm-charts
 echo -e "${YELLOW}Updating Helm repositories...${NC}"
 helm repo update
 echo -e "${GREEN}✓ Helm repositories added and updated${NC}"
@@ -203,6 +205,18 @@ else
   echo -e "${YELLOW}The installation may still be in progress. Check with: kubectl get pods -n monitoring${NC}"
 fi
 
+# Install Loki Stack
+echo -e "\n${BLUE}Installing Loki Stack...${NC}"
+helm install loki grafana/loki \
+  --namespace monitoring \
+  -f ../k8s/helm/loki/values.yaml
+echo -e "${YELLOW}Waiting for Loki resources to be created...${NC}"
+kubectl wait --namespace monitoring \
+  --for=condition=ready pod \
+  --selector=app=loki \
+  --timeout=120s || true
+echo -e "${GREEN}✓ Loki Stack installed${NC}"
+
 # Verify the deployment
 echo -e "\n${BLUE}Verifying deployment...${NC}"
 echo -e "${YELLOW}Checking Ingress resources...${NC}"
@@ -221,6 +235,7 @@ if [ ! -z "$EXTERNAL_IP" ]; then
   echo -e "Prometheus: ${GREEN}http://prometheus.$EXTERNAL_IP.nip.io${NC}"
   echo -e "Grafana: ${GREEN}http://grafana.$EXTERNAL_IP.nip.io${NC} (default credentials: admin/admin)"
   echo -e "Alertmanager: ${GREEN}http://alertmanager.$EXTERNAL_IP.nip.io${NC}"
+  echo -e "Loki: ${GREEN}http://loki.$EXTERNAL_IP.nip.io${NC}"
 else
   echo -e "${YELLOW}The External IP of the NGINX Ingress Controller could not be detected.${NC}"
   echo -e "${YELLOW}Run the following command to get the External IP:${NC}"
@@ -229,4 +244,5 @@ else
   echo -e "Prometheus: http://prometheus.<EXTERNAL_IP>.nip.io"
   echo -e "Grafana: http://grafana.<EXTERNAL_IP>.nip.io (default credentials: admin/admin)"
   echo -e "Alertmanager: http://alertmanager.<EXTERNAL_IP>.nip.io"
+  echo -e "Loki: http://loki.<EXTERNAL_IP>.nip.io"
 fi
