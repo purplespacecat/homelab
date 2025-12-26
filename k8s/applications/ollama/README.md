@@ -1,5 +1,13 @@
 # Ollama LLM on Kubernetes
 
+> **📦 Helm Deployment Available**: For easier management, consider using the [Helm chart deployment](../../helm/ollama/) instead of these raw YAML files.
+>
+> Quick start with Helm:
+> ```bash
+> cd ../../helm/ollama
+> ./install.sh
+> ```
+
 This deployment runs [Ollama](https://ollama.ai/), a local LLM server, on your Kubernetes homelab cluster and exposes it to your home network.
 
 ## What is Ollama?
