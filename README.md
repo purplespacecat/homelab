@@ -1,6 +1,6 @@
 # Kubernetes Homelab Repository
 
-This repo contains files and scripts for a Kubernetes homelab running on **kubeadm**.
+This repo contains files and scripts for a Kubernetes homelab with support for both **K3s** and **kubeadm**.
 
 ## Repository Structure
 
@@ -14,71 +14,81 @@ This repo contains files and scripts for a Kubernetes homelab running on **kubea
 |k8s/cert-manager|TLS certificate management configuration|
 |k8s/helm|Helm chart values (Prometheus, Ingress NGINX)|
 |network|Network configuration files including cloud-init setups|
-|scripts|Utility scripts for installation, setup, and verification|
+|scripts/k3s|K3s cluster setup scripts (lightweight Kubernetes)
+|scripts/kubeadm|Kubeadm cluster setup scripts (full Kubernetes)
+|scripts/common|Shared utilities (NFS, Helm, cert-manager, etc.)|
 
 ## Available Scripts
 
-### Cluster Setup & Management
-- **setup-master-node.sh** - Complete master/control-plane setup (K8s + CNI + firewall)
-- **setup-worker-node.sh** - Complete worker node setup (K8s + NFS client + firewall)
-- **join-worker-node.sh** - Join a worker node to the cluster
-- **teardown-kubeadm-cluster.sh** - Completely remove Kubernetes cluster
+### K3s Cluster (Lightweight)
+- **k3s/setup-k3s-master.sh** - Setup K3s server/master node
+- **k3s/setup-k3s-worker.sh** - Setup K3s agent/worker node
+- **k3s/teardown-k3s-cluster.sh** - Remove K3s from node
 
-### Network Configuration
-- **install-calico.sh** - Install Calico CNI plugin (standalone)
+### Kubeadm Cluster (Full Kubernetes)
+- **kubeadm/setup-master-node.sh** - Setup control plane (K8s + CNI + firewall)
+- **kubeadm/setup-worker-node.sh** - Setup worker node (K8s + NFS + firewall)
+- **kubeadm/join-worker-node.sh** - Join worker to cluster
+- **kubeadm/teardown-cluster.sh** - Remove Kubernetes cluster
 
-### Storage & NFS
-- **setup-nfs-server.sh** - Setup NFS server locally
-- **setup-nfs-server-remote.sh** - Setup NFS server on remote host
-- **fix-worker-nfs-client.sh** - Install nfs-common on worker nodes
-- **install-nfs-provisioner.sh** - Install NFS dynamic provisioner
-- **verify-nfs-setup.sh** - Verify NFS server and client configuration
-- **secure-nfs.sh** - Secure NFS exports
-
-### Application Stack Installation
-- **install-helm-charts.sh** - Install all helm charts (complete stack)
-- **install-cert-manager.sh** - Install cert-manager for TLS certificates
-- **uninstall-all-helm-charts.sh** - Uninstall all helm charts
-
-### Verification & Utilities
-- **verify-exposure.sh** - Verify service exposure and get access URLs
-- **generate-grafana-creds.sh** - Generate Grafana credentials
-- **extract-ca-cert.sh** - Extract cluster CA certificate
-- **setup-remote-host.sh** - Setup remote host for cluster operations
-
-### Consolidated Scripts
-
-The following scripts have been consolidated for streamlined workflows:
-
-**✓ setup-master-node.sh** - All-in-one master node setup including:
-- Kubernetes components (kubeadm, kubelet, kubectl)
-- Container runtime (containerd)
-- CNI plugin installation (Calico by default)
-- Firewall configuration (HTTP/HTTPS/MetalLB ports)
-- Cluster initialization
-
-**✓ setup-worker-node.sh** - All-in-one worker node setup including:
-- Kubernetes components (kubeadm, kubelet, kubectl)
-- Container runtime (containerd)
-- NFS client (nfs-common)
-- Firewall configuration (Kubelet/NodePort ranges)
+### Common Utilities (All Cluster Types)
+- **common/install-helm-charts.sh** - Install complete application stack
+- **common/install-cert-manager.sh** - TLS certificate management
+- **common/uninstall-all-helm-charts.sh** - Uninstall all Helm releases
+- **common/setup-nfs-server.sh** - Setup local NFS server
+- **common/setup-nfs-server-remote.sh** - Setup remote NFS server
+- **common/install-nfs-provisioner.sh** - NFS dynamic provisioner
+- **common/verify-nfs-setup.sh** - Verify NFS configuration
+- **common/fix-worker-nfs-client.sh** - Install nfs-common on workers
+- **common/secure-nfs.sh** - Secure NFS exports
+- **common/install-calico.sh** - Standalone Calico CNI install
+- **common/verify-exposure.sh** - Verify service URLs
+- **common/extract-ca-cert.sh** - Extract cluster CA certificate
+- **common/generate-grafana-creds.sh** - Generate Grafana credentials
 
 ## Quick Start
 
-### Prerequisites
+### Choose Your Kubernetes Distribution
 
-Before installing the application stack, ensure your Kubernetes cluster is set up:
+#### Option 1: K3s (Recommended for beginners)
+K3s is lightweight, easy to install, and perfect for homelabs.
 
-1. **Master Node Setup**: Run `sudo ./scripts/setup-master-node.sh` on your master node
-2. **Worker Node Setup**: Run `sudo ./scripts/setup-worker-node.sh` on each worker, then join using `./scripts/join-worker-node.sh`
-3. **Setup NFS Storage**: Run `./scripts/setup-nfs-server.sh` on your NFS host (or `setup-nfs-server-remote.sh` for remote hosts)
+```bash
+# On master node
+sudo ./scripts/k3s/setup-k3s-master.sh
+
+# On worker nodes (use token and URL from master)
+K3S_URL=https://master-ip:6443 K3S_TOKEN=<token> sudo -E ./scripts/k3s/setup-k3s-worker.sh
+```
+
+#### Option 2: Kubeadm (Full Kubernetes)
+Full Kubernetes installation with more flexibility and features.
+
+```bash
+# On master node
+sudo ./scripts/kubeadm/setup-master-node.sh
+
+# On worker nodes
+sudo ./scripts/kubeadm/setup-worker-node.sh
+sudo ./scripts/kubeadm/join-worker-node.sh
+```
+
+### Setup NFS Storage
+
+```bash
+# For remote NFS server
+./scripts/common/setup-nfs-server-remote.sh 192.168.100.98
+
+# For local NFS server
+./scripts/common/setup-nfs-server.sh
+```
 
 ### Complete Application Stack Installation
 
 Install the entire homelab stack with a single command:
 
 ```bash
-./scripts/install-helm-charts.sh
+./scripts/common/install-helm-charts.sh
 ```
 
 This will install:
@@ -93,7 +103,7 @@ This will install:
 After installation, verify all services are exposed correctly:
 
 ```bash
-./scripts/verify-exposure.sh
+./scripts/common/verify-exposure.sh
 ```
 
 ### Uninstall Application Stack
@@ -101,21 +111,21 @@ After installation, verify all services are exposed correctly:
 To remove all helm-installed components:
 
 ```bash
-./scripts/uninstall-all-helm-charts.sh
+./scripts/common/uninstall-all-helm-charts.sh
 ```
 
 ## Detailed Setup Guides
 
 ### Monitoring Stack Setup
 
-The monitoring stack (Prometheus, Grafana, Alertmanager) is installed automatically with `./scripts/install-helm-charts.sh`.
+The monitoring stack (Prometheus, Grafana, Alertmanager) is installed automatically with `./scripts/common/install-helm-charts.sh`.
 
 **Access URLs** (after installation):
 - Prometheus: `http://prometheus.<INGRESS_IP>.nip.io`
 - Grafana: `http://grafana.<INGRESS_IP>.nip.io` (default: admin/admin)
 - Alertmanager: `http://alertmanager.<INGRESS_IP>.nip.io`
 
-Run `./scripts/verify-exposure.sh` to get the exact URLs for your cluster.
+Run `./scripts/common/verify-exposure.sh` to get the exact URLs for your cluster.
 
 **Updating Prometheus Configuration**:
 ```bash
@@ -130,7 +140,7 @@ helm upgrade prometheus prometheus-community/kube-prometheus-stack \
 
 ### TLS/HTTPS Setup with Cert-Manager (Optional)
 
-Cert-manager is installed automatically with `./scripts/install-helm-charts.sh` and provides TLS certificate management.
+Cert-manager is installed automatically with `./scripts/common/install-helm-charts.sh` and provides TLS certificate management.
 
 **Available Certificate Issuers**:
 
@@ -185,7 +195,7 @@ To avoid certificate warnings when using the homelab CA:
 
 1. Extract the CA certificate:
    ```bash
-   ./scripts/extract-ca-cert.sh
+   ./scripts/common/extract-ca-cert.sh
    ```
 
 2. Import `homelab-ca.crt` into your browser or system trust store:
@@ -232,7 +242,7 @@ helm upgrade prometheus prometheus-community/kube-prometheus-stack \
 
 **Manual Installation**:
 ```bash
-./scripts/install-cert-manager.sh
+./scripts/common/install-cert-manager.sh
 ```
 
 ### Exposing Services to Local Network
@@ -307,14 +317,14 @@ Use `type: LoadBalancer` services to get dedicated IPs for databases, message br
 ## Troubleshooting
 
 ### NFS Issues
-- **PVCs stuck in Pending**: Run `./scripts/verify-nfs-setup.sh` to diagnose
-- **Mount failures**: Ensure `nfs-common` is installed on all nodes (use `./scripts/fix-worker-nfs-client.sh`)
+- **PVCs stuck in Pending**: Run `./scripts/common/verify-nfs-setup.sh` to diagnose
+- **Mount failures**: Ensure `nfs-common` is installed on all nodes (use `./scripts/common/fix-worker-nfs-client.sh`)
 - **Permission errors**: Check directory permissions on NFS server (usually needs 777 for testing)
 
 ### Service Exposure Issues
-- **Can't access services**: Run `./scripts/verify-exposure.sh` to check configuration
+- **Can't access services**: Run `./scripts/common/verify-exposure.sh` to check configuration
 - **Wrong IP in URLs**: Get the correct ingress IP with `kubectl get svc -n ingress-nginx`
-- **Firewall blocking**: Run firewall fix scripts on master/worker nodes
+- **Firewall blocking**: Firewall rules are configured automatically by setup scripts
 
 ### Cluster Issues
 - **Pods not starting**: Check `kubectl get pods -A` and `kubectl describe pod <pod-name>`
@@ -348,7 +358,7 @@ This homelab uses a multi-layer networking approach:
 
 The homelab uses Helm for managing applications. Here's how it works:
 
-**Installation Flow** (`./scripts/install-helm-charts.sh`):
+**Installation Flow** (`./scripts/common/install-helm-charts.sh`):
 1. Install/verify Helm is present
 2. Create namespaces (`monitoring`, `ingress-nginx`)
 3. Install MetalLB (raw manifests, not Helm)
@@ -385,31 +395,34 @@ If your cluster goes down, rebuild it from this repository:
 
 **Full Cluster Rebuild Steps**:
 
-1. **Rebuild Master Node**:
-   ```bash
-   sudo ./scripts/setup-master-node.sh
-   # Configurable: KUBERNETES_VERSION, POD_NETWORK_CIDR, CNI_PLUGIN
-   ```
+**For K3s:**
+```bash
+# Master node
+sudo ./scripts/k3s/setup-k3s-master.sh
 
-2. **Rebuild Worker Nodes**:
-   ```bash
-   # On each worker node
-   sudo ./scripts/setup-worker-node.sh
+# Worker nodes
+K3S_URL=https://master-ip:6443 K3S_TOKEN=<token> sudo -E ./scripts/k3s/setup-k3s-worker.sh
+```
 
-   # Join to cluster (get join command from master)
-   sudo kubeadm join <master-ip>:6443 --token <token> \
-     --discovery-token-ca-cert-hash sha256:<hash>
-   ```
+**For Kubeadm:**
+```bash
+# Master node
+sudo ./scripts/kubeadm/setup-master-node.sh
+# Configurable: KUBERNETES_VERSION, POD_NETWORK_CIDR, CNI_PLUGIN
 
-3. **Setup NFS Storage** (if NFS server also went down):
-   ```bash
-   ./scripts/setup-nfs-server.sh  # or setup-nfs-server-remote.sh
-   ```
+# Worker nodes
+sudo ./scripts/kubeadm/setup-worker-node.sh
+sudo ./scripts/kubeadm/join-worker-node.sh
+```
 
-4. **Install Application Stack**:
-   ```bash
-   ./scripts/install-helm-charts.sh
-   ```
+**Setup NFS and Applications** (both cluster types):
+```bash
+# NFS storage
+./scripts/common/setup-nfs-server-remote.sh 192.168.100.98
+
+# Application stack
+./scripts/common/install-helm-charts.sh
+```
 
 5. **Restore Custom Configurations**:
    - Update MetalLB IP pool if needed: `kubectl apply -f k8s/core/networking/metallb-config.yaml`
