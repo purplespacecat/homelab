@@ -6,7 +6,7 @@ prometheusOperator:
 prometheus:
   enabled: true
   prometheusSpec:
-    retention: 30d
+    retention: 2d
     storageSpec:
       volumeClaimTemplate:
         metadata:

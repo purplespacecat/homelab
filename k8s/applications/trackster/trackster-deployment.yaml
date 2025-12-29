@@ -124,14 +124,16 @@ metadata:
   name: trackster-ingress
   namespace: trackster
   annotations:
-    kubernetes.io/ingress.class: nginx
     nginx.ingress.kubernetes.io/rewrite-target: /
-    cert-manager.io/cluster-issuer: "local-ca-issuer"  # Optional: SSL/TLS
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+    # cert-manager.io/cluster-issuer: "homelab-ca-issuer"  # Optional: Uncomment for SSL/TLS
 spec:
-  tls:
-  - hosts:
-    - trackster.192.168.100.202.nip.io  # Adjust IP to match your ingress controller's external IP
-    secretName: trackster-tls
+  ingressClassName: nginx
+  # Uncomment for TLS (also uncomment cert-manager annotation above):
+  # tls:
+  # - hosts:
+  #   - trackster.192.168.100.202.nip.io
+  #   secretName: trackster-tls
   rules:
   - host: trackster.192.168.100.202.nip.io  # Adjust IP to match your ingress controller's external IP
     http:
