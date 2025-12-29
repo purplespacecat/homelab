@@ -58,25 +58,14 @@ helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx \
 
 kubectl wait --namespace ingress-nginx --for=condition=ready pod --selector=app.kubernetes.io/component=controller --timeout=120s 2>&1 | grep -iE "error|met" || true
 
-# Get external IP
-EXTERNAL_IP=""
-timeout=60
-while [ $timeout -gt 0 ]; do
-  EXTERNAL_IP=$(kubectl get svc -n ingress-nginx ingress-nginx-controller -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null)
-  [ -n "$EXTERNAL_IP" ] && break
-  sleep 2
-  ((timeout -= 2))
-done
-
-if [ -z "$EXTERNAL_IP" ]; then
-  echo "Warning: Could not detect external IP, using placeholder"
-  EXTERNAL_IP="192.168.100.200"
+# Get node IP for hostNetwork mode (ingress-nginx binds directly to node IP)
+# This is more reliable than MetalLB L2 mode which doesn't work well on WiFi
+NODE_IP=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}')
+if [ -z "$NODE_IP" ]; then
+  echo "Warning: Could not detect node IP, using fallback"
+  NODE_IP="192.168.100.98"
 fi
-
-# Update Prometheus values with external IP
-if [ -f "$REPO_ROOT/k8s/helm/prometheus/values.yaml" ]; then
-  sed -i "s/hosts:/hosts:\n      - \"prometheus.${EXTERNAL_IP}.nip.io\"/" "$REPO_ROOT/k8s/helm/prometheus/values.yaml" 2>/dev/null || true
-fi
+EXTERNAL_IP="$NODE_IP"
 
 # Install Prometheus Stack
 if [ ! -f "$REPO_ROOT/k8s/helm/prometheus/values.yaml" ]; then
@@ -117,10 +106,12 @@ echo ""
 echo "=== Helm Charts Installation Complete ==="
 kubectl get pods -A | grep -E "NAME|metallb|ingress|prometheus|grafana|nfs"
 echo ""
-echo "External IP: $EXTERNAL_IP"
+echo "Node IP: $EXTERNAL_IP"
 echo "Prometheus: http://prometheus.${EXTERNAL_IP}.nip.io"
 echo "Grafana: http://grafana.${EXTERNAL_IP}.nip.io"
 echo "Alertmanager: http://alertmanager.${EXTERNAL_IP}.nip.io"
+echo ""
+echo "Note: Using hostNetwork mode (services bound to node IP on ports 80/443)"
 echo ""
 echo "=== Grafana Credentials ==="
 if kubectl get secret grafana-admin-credentials -n monitoring &>/dev/null; then

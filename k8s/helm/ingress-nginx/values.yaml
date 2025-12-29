@@ -1,8 +1,11 @@
 controller:
+  # Use hostNetwork mode for WiFi compatibility (L2 mode doesn't work on WiFi)
+  hostNetwork: true
+  dnsPolicy: ClusterFirstWithHostNet
+
   service:
-    type: LoadBalancer
-    annotations:
-      metallb.universe.tf/allow-shared-ip: "true"
+    type: ClusterIP  # Changed from LoadBalancer since we're using hostNetwork
+
   metrics:
     enabled: true
     service:
