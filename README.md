@@ -247,42 +247,45 @@ helm upgrade prometheus prometheus-community/kube-prometheus-stack \
 
 ### Exposing Services to Local Network
 
-Services are exposed using MetalLB + NGINX Ingress Controller + nip.io DNS.
+Services are exposed using **NGINX Ingress Controller in hostNetwork mode** + **nip.io DNS**.
 
-**Key Components**:
-1. **MetalLB**: Provides LoadBalancer IPs from your local network
-2. **NGINX Ingress**: Routes HTTP/HTTPS traffic to services
-3. **nip.io**: Wildcard DNS (e.g., `service.192.168.100.200.nip.io` → `192.168.100.200`)
+**Current Architecture** (optimized for WiFi networks):
+1. **NGINX Ingress**: Runs with `hostNetwork: true`, binding directly to the node IP
+2. **Node IP**: `192.168.100.98` (your K3s node - check with `kubectl get nodes -o wide`)
+3. **nip.io**: Wildcard DNS (e.g., `service.192.168.100.98.nip.io` → `192.168.100.98`)
 
-**Configure MetalLB IP Pool**:
-Edit `k8s/core/networking/metallb-config.yaml` to set your IP range:
-```yaml
-spec:
-  addresses:
-  - 192.168.100.200-192.168.100.220  # Adjust for your network
-```
+**Why hostNetwork mode?**
+- MetalLB L2 mode doesn't work reliably over WiFi interfaces
+- hostNetwork allows NGINX to bind directly to the node's network
+- No need for LoadBalancer service type for HTTP/HTTPS traffic
 
-Apply: `kubectl apply -f k8s/core/networking/metallb-config.yaml`
+**For detailed networking documentation**, see [docs/NETWORKING.md](docs/NETWORKING.md)
 
-**Get Ingress Controller IP**:
+**Get Your Node IP**:
 ```bash
-kubectl get svc -n ingress-nginx ingress-nginx-controller
+kubectl get nodes -o wide
+# Check the INTERNAL-IP column
 ```
 
 **Accessing Services**:
 
-Services can be accessed via nip.io domains (e.g., `http://prometheus.192.168.100.200.nip.io`).
+Services can be accessed via nip.io domains using your node IP:
+- `http://prometheus.192.168.100.98.nip.io`
+- `http://grafana.192.168.100.98.nip.io`
+- `http://alertmanager.192.168.100.98.nip.io`
 
-If nip.io doesn't work on Windows or your network, add entries to your hosts file:
+**How nip.io works**: It's a magic DNS service that automatically resolves any hostname containing an IP to that IP. No configuration needed!
+
+If nip.io doesn't work on your network, add entries to your hosts file:
 
 **Windows**: Edit `C:\Windows\System32\drivers\etc\hosts` (as Administrator)
 ```
-192.168.100.200 prometheus.local grafana.local alertmanager.local
+192.168.100.98 prometheus.local grafana.local alertmanager.local
 ```
 
 **Linux/Mac**: Edit `/etc/hosts` (with sudo)
 ```
-192.168.100.200 prometheus.local grafana.local alertmanager.local
+192.168.100.98 prometheus.local grafana.local alertmanager.local
 ```
 
 Then access services via:
@@ -297,9 +300,12 @@ kind: Ingress
 metadata:
   name: my-service-ingress
   namespace: my-namespace
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"  # HTTP only
 spec:
+  ingressClassName: nginx  # Use this instead of deprecated annotation
   rules:
-  - host: myservice.<INGRESS_IP>.nip.io  # or myservice.local if using hosts file
+  - host: myservice.192.168.100.98.nip.io  # Use your node IP
     http:
       paths:
       - path: /
@@ -312,7 +318,8 @@ spec:
 ```
 
 **Expose Non-HTTP Services**:
-Use `type: LoadBalancer` services to get dedicated IPs for databases, message brokers, etc.
+Use `type: LoadBalancer` services with MetalLB to get dedicated IPs for databases, message brokers, etc.
+MetalLB IP pool: `192.168.100.200-192.168.100.250` (configured in `k8s/core/networking/metallb-config.yaml`)
 
 ## Troubleshooting
 
@@ -335,24 +342,37 @@ Use `type: LoadBalancer` services to get dedicated IPs for databases, message br
 
 ### Networking Flow
 
-This homelab uses a multi-layer networking approach:
+This homelab uses **hostNetwork mode** for NGINX Ingress (optimized for WiFi):
 
 ```
-[External Device] → [MetalLB LoadBalancer IP] → [NGINX Ingress Controller] → [Service] → [Pod]
+[External Device] → [Node IP] → [NGINX Ingress (hostNetwork)] → [Service] → [Pod]
 ```
 
-**Detailed Flow**:
-1. **External Access**: User accesses `http://grafana.192.168.100.200.nip.io`
-2. **DNS Resolution**: nip.io resolves to `192.168.100.200` (or use hosts file)
-3. **MetalLB**: Assigns `192.168.100.200` from the IP pool to the NGINX Ingress service (type: LoadBalancer)
-4. **NGINX Ingress**: Routes traffic based on hostname to the appropriate backend service
-5. **Kubernetes Service**: Load balances across pod replicas
-6. **Pod**: Handles the request (e.g., Grafana pod)
+**Detailed Flow (HTTP/HTTPS Services)**:
+1. **External Access**: User accesses `http://grafana.192.168.100.98.nip.io`
+2. **DNS Resolution**: nip.io automatically resolves to `192.168.100.98` (the node IP)
+3. **Node Network**: Traffic arrives at port 80/443 on the K3s node
+4. **NGINX Ingress**: Running in hostNetwork mode, directly listens on node's port 80/443
+5. **Routing**: NGINX routes traffic based on hostname to the appropriate backend service (ClusterIP)
+6. **Kubernetes Service**: Load balances across pod replicas
+7. **Pod**: Handles the request (e.g., Grafana pod)
+
+**Why hostNetwork instead of LoadBalancer?**
+- MetalLB L2 mode doesn't work reliably over WiFi interfaces
+- hostNetwork allows NGINX to bind directly to the node's network interface
+- Service type is ClusterIP (not LoadBalancer) since NGINX uses the node IP
+
+**For non-HTTP services** (databases, etc.):
+- Use `type: LoadBalancer` to get a MetalLB-assigned IP
+- MetalLB IP pool: `192.168.100.200-192.168.100.250`
 
 **Key Configuration Points**:
-- MetalLB IP pool: `k8s/core/networking/metallb-config.yaml` (must match your network segment)
+- NGINX Ingress: `k8s/helm/ingress-nginx/values.yaml` (hostNetwork: true)
+- MetalLB IP pool: `k8s/core/networking/metallb-config.yaml` (for non-HTTP services)
 - Ingress rules: Defined in Helm values (e.g., `k8s/helm/prometheus/values.yaml`)
 - Service endpoints: Automatically managed by Kubernetes
+
+**Full networking documentation**: See [docs/NETWORKING.md](docs/NETWORKING.md) for detailed explanations
 
 ### Helm Workflow
 

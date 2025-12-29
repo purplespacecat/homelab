@@ -2,7 +2,18 @@
 
 This document provides an overview of all Kubernetes resources defined in this repository for the kubeadm homelab setup. It explains the purpose and functionality of each resource.
 
-## Important Notes for Kubeadm
+## Important Notes
+
+### Networking Architecture
+
+This homelab uses **NGINX Ingress in hostNetwork mode** due to WiFi compatibility:
+- NGINX binds directly to the node IP (`192.168.100.98`)
+- Service type: ClusterIP (not LoadBalancer)
+- All Ingress hostnames should use: `service-name.192.168.100.98.nip.io`
+
+**For detailed networking documentation**, see [../docs/NETWORKING.md](../docs/NETWORKING.md)
+
+### Kubeadm Migration
 
 This repository has been migrated from K3s to **kubeadm**. All K3s-specific configurations (like HelmChart CRDs) have been removed and replaced with standard Helm CLI installations.
 
@@ -159,7 +170,10 @@ Configures the Prometheus monitoring stack (includes Prometheus, Grafana, and Al
 
 ### `helm/ingress-nginx/values.yaml`
 NGINX Ingress Controller configuration:
-- **Service Type**: LoadBalancer (uses MetalLB)
+- **hostNetwork**: Enabled (true) - Binds directly to node's network interface
+- **Service Type**: ClusterIP (not LoadBalancer, due to WiFi compatibility)
+- **DNS Policy**: ClusterFirstWithHostNet
+- **Why hostNetwork?**: MetalLB L2 mode doesn't work reliably over WiFi interfaces
 - **Metrics**: Enabled with Prometheus annotations for auto-discovery
 - **Configuration**:
   - Max body size: 100m
