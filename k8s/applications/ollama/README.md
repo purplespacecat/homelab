@@ -78,7 +78,7 @@ You can access Ollama via:
 
 2. **Via Ingress/nip.io**:
    ```bash
-   curl http://ollama.192.168.100.202.nip.io
+   curl http://ollama.192.168.100.98.nip.io
    ```
 
 ### Download and Run a Model

@@ -97,8 +97,9 @@ ingress:
   ingressClassName: nginx
   annotations:
     nginx.ingress.kubernetes.io/proxy-body-size: "100m"
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
   hosts:
-    - jupyter.192.168.100.202.nip.io  # Adjust to your ingress IP
+    - jupyter.192.168.100.98.nip.io  # Node IP where NGINX Ingress listens
   tls: []
 
 # Pre-pull images (optional, speeds up first launch)

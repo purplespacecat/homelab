@@ -102,8 +102,8 @@ INGRESS_IP=$(kubectl get svc -n ingress-nginx ingress-nginx-controller -o jsonpa
 
 if [ -z "$INGRESS_IP" ]; then
     echo "Could not detect ingress IP automatically."
-    read -p "Enter your ingress controller IP (or press Enter to use 192.168.100.202): " INGRESS_IP
-    INGRESS_IP=${INGRESS_IP:-192.168.100.202}
+    read -p "Enter your ingress controller IP (or press Enter to use 192.168.100.98): " INGRESS_IP
+    INGRESS_IP=${INGRESS_IP:-192.168.100.98}
 fi
 
 echo "Using ingress IP: $INGRESS_IP"

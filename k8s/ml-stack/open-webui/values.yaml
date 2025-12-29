@@ -49,13 +49,13 @@ ingress:
     nginx.ingress.kubernetes.io/proxy-body-size: "50m"  # For document uploads
     nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
     nginx.ingress.kubernetes.io/proxy-send-timeout: "600"
-  host: open-webui.192.168.100.202.nip.io  # Adjust to your ingress IP
+  host: open-webui.192.168.100.98.nip.io  # Node IP where NGINX Ingress listens
   tls: []
   # Uncomment for TLS:
   # tls:
   #   - secretName: open-webui-tls
   #     hosts:
-  #       - open-webui.192.168.100.202.nip.io
+  #       - open-webui.192.168.100.98.nip.io
 
 # Resource limits
 resources:

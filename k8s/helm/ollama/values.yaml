@@ -51,7 +51,7 @@ ingress:
     nginx.ingress.kubernetes.io/proxy-send-timeout: "600"
     nginx.ingress.kubernetes.io/ssl-redirect: "false"
   hosts:
-    - host: ollama.192.168.100.202.nip.io  # Adjust to your ingress IP
+    - host: ollama.192.168.100.98.nip.io  # Node IP where NGINX Ingress listens
       paths:
         - path: /
           pathType: Prefix
@@ -60,7 +60,7 @@ ingress:
   # tls:
   #  - secretName: ollama-tls
   #    hosts:
-  #      - ollama.192.168.100.202.nip.io
+  #      - ollama.192.168.100.98.nip.io
 
 # Persistent storage
 persistence:

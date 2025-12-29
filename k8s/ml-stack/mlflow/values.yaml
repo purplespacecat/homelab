@@ -31,9 +31,10 @@ trackingServer:
   ingress:
     enabled: true
     className: nginx
-    annotations: {}
+    annotations:
+      nginx.ingress.kubernetes.io/ssl-redirect: "false"
     hosts:
-      - host: mlflow.192.168.100.202.nip.io  # Adjust to your ingress IP
+      - host: mlflow.192.168.100.98.nip.io  # Node IP where NGINX Ingress listens
         paths:
           - path: /
             pathType: Prefix

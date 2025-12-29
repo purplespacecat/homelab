@@ -149,19 +149,19 @@ Configures the Prometheus monitoring stack (includes Prometheus, Grafana, and Al
    - **Storage**: Uses 10Gi PV with `nfs-client` StorageClass
    - **Retention**: 30 days data retention
    - **Resources**: Requests 500m CPU, 512Mi memory; limits to 1000m CPU, 1Gi memory
-   - **Ingress**: Exposes at `prometheus.local` and `prometheus.192.168.100.202.nip.io`
+   - **Ingress**: Exposes at `prometheus.local` and `prometheus.192.168.100.98.nip.io`
    - **TLS**: Configured with `homelab-ca-issuer`
 
 2. **Grafana** (bundled with Prometheus stack):
    - **Storage**: 10Gi persistent storage with `nfs-client` StorageClass
-   - **Ingress**: Configured at `grafana.local` and `grafana.192.168.100.202.nip.io`
+   - **Ingress**: Configured at `grafana.local` and `grafana.192.168.100.98.nip.io`
    - **Security**: Uses a Kubernetes secret for admin credentials
    - **TLS**: Configured with `homelab-ca-issuer`
    - **Note**: This is the primary Grafana configuration; separate grafana/values.yaml has been removed
 
 3. **AlertManager**:
    - **Storage**: 10Gi with `nfs-client` StorageClass for each replica
-   - **Ingress**: Available at `alertmanager.local` and `alertmanager.192.168.100.202.nip.io`
+   - **Ingress**: Available at `alertmanager.local` and `alertmanager.192.168.100.98.nip.io`
    - **TLS**: Configured with `homelab-ca-issuer`
 
 4. **Exporters**:
