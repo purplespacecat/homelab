@@ -30,6 +30,7 @@ prometheus:
     annotations:
       nginx.ingress.kubernetes.io/ssl-redirect: "false"
     hosts:
+      - "prometheus.192.168.100.201.nip.io"
       - "prometheus.local"
       - "prometheus.192.168.100.200.nip.io"
     paths:
@@ -48,6 +49,7 @@ grafana:
     annotations:
       nginx.ingress.kubernetes.io/ssl-redirect: "false"
     hosts:
+      - "prometheus.192.168.100.201.nip.io"
       - "grafana.local"
       - "grafana.192.168.100.200.nip.io"
     paths:
@@ -81,6 +83,7 @@ alertmanager:
     annotations:
       nginx.ingress.kubernetes.io/ssl-redirect: "false"
     hosts:
+      - "prometheus.192.168.100.201.nip.io"
       - "alertmanager.local"
       - "alertmanager.192.168.100.200.nip.io"
     paths:
