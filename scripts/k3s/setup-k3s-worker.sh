@@ -4,7 +4,7 @@ set -e
 
 [ "$EUID" -ne 0 ] && { echo "Error: Run as root"; exit 1; }
 
-K3S_VERSION="${K3S_VERSION:-v1.28.5+k3s1}"
+K3S_VERSION="${K3S_VERSION:-}"  # Default to latest version
 K3S_URL="${K3S_URL:-}"
 K3S_TOKEN="${K3S_TOKEN:-}"
 
@@ -15,8 +15,12 @@ if [ -z "$K3S_URL" ] || [ -z "$K3S_TOKEN" ]; then
     exit 1
 fi
 
-# Install k3s agent
-curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION="$K3S_VERSION" K3S_URL="$K3S_URL" K3S_TOKEN="$K3S_TOKEN" sh - 2>&1 | grep -i error || true
+# Install k3s agent (latest version unless K3S_VERSION is set)
+if [ -n "$K3S_VERSION" ]; then
+    curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION="$K3S_VERSION" K3S_URL="$K3S_URL" K3S_TOKEN="$K3S_TOKEN" sh - 2>&1 | grep -i error || true
+else
+    curl -sfL https://get.k3s.io | K3S_URL="$K3S_URL" K3S_TOKEN="$K3S_TOKEN" sh - 2>&1 | grep -i error || true
+fi
 
 # Wait for k3s-agent to be ready
 timeout=60

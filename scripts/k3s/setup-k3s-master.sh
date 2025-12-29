@@ -4,11 +4,15 @@ set -e
 
 [ "$EUID" -ne 0 ] && { echo "Error: Run as root"; exit 1; }
 
-K3S_VERSION="${K3S_VERSION:-v1.28.5+k3s1}"
+K3S_VERSION="${K3S_VERSION:-}"  # Default to latest version
 INSTALL_K3S_EXEC="${INSTALL_K3S_EXEC:---disable traefik --disable servicelb --write-kubeconfig-mode 644}"
 
-# Install k3s server
-curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION="$K3S_VERSION" INSTALL_K3S_EXEC="$INSTALL_K3S_EXEC" sh - 2>&1 | grep -i error || true
+# Install k3s server (latest version unless K3S_VERSION is set)
+if [ -n "$K3S_VERSION" ]; then
+    curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION="$K3S_VERSION" INSTALL_K3S_EXEC="$INSTALL_K3S_EXEC" sh - 2>&1 | grep -i error || true
+else
+    curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="$INSTALL_K3S_EXEC" sh - 2>&1 | grep -i error || true
+fi
 
 # Wait for k3s to be ready
 timeout=60
