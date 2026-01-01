@@ -1,0 +1,102 @@
+apiVersion: helm.toolkit.fluxcd.io/v2beta1
+kind: HelmRelease
+metadata:
+  name: prometheus-stack
+  namespace: monitoring
+spec:
+  interval: 5m
+  chart:
+    spec:
+      chart: kube-prometheus-stack
+      version: 55.0.0
+      sourceRef:
+        kind: HelmRepository
+        name: prometheus-community
+        namespace: flux-system
+  values:
+    # Prometheus configuration
+    prometheus:
+      prometheusSpec:
+        retention: 2d
+        storageSpec:
+          volumeClaimTemplate:
+            spec:
+              storageClassName: nfs-client
+              accessModes: ["ReadWriteOnce"]
+              resources:
+                requests:
+                  storage: 10Gi
+        resources:
+          requests:
+            cpu: 500m
+            memory: 512Mi
+          limits:
+            cpu: 1000m
+            memory: 1Gi
+      ingress:
+        enabled: true
+        ingressClassName: nginx
+        hosts:
+          - prometheus.192.168.100.98.nip.io
+          - prometheus.local
+
+    # Grafana configuration
+    grafana:
+      enabled: true
+      persistence:
+        enabled: true
+        storageClassName: nfs-client
+        size: 10Gi
+      adminPassword: admin
+      ingress:
+        enabled: true
+        ingressClassName: nginx
+        hosts:
+          - grafana.192.168.100.98.nip.io
+          - grafana.local
+
+    # Alertmanager configuration
+    alertmanager:
+      alertmanagerSpec:
+        storage:
+          volumeClaimTemplate:
+            spec:
+              storageClassName: nfs-client
+              accessModes: ["ReadWriteOnce"]
+              resources:
+                requests:
+                  storage: 10Gi
+      ingress:
+        enabled: true
+        ingressClassName: nginx
+        hosts:
+          - alertmanager.192.168.100.98.nip.io
+          - alertmanager.local
+
+    # Disable components not available in some clusters
+    kubeScheduler:
+      enabled: false
+    kubeControllerManager:
+      enabled: false
+    kubeEtcd:
+      enabled: false
+    kubeProxy:
+      enabled: false
+
+    # Enable exporters
+    nodeExporter:
+      enabled: true
+    kubeStateMetrics:
+      enabled: true
+
+    # Prometheus Operator
+    prometheusOperator:
+      admissionWebhooks:
+        enabled: false
+  install:
+    createNamespace: true
+    remediation:
+      retries: 3
+  upgrade:
+    remediation:
+      retries: 3
