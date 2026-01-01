@@ -2,20 +2,40 @@
 
 This repo contains files and scripts for a Kubernetes homelab with support for both **K3s** and **kubeadm**.
 
+## 🚀 GitOps Active with FluxCD
+
+**This cluster is now managed by FluxCD GitOps!** All infrastructure is automatically deployed and synchronized from this Git repository.
+
+**What this means:**
+- ✅ **Git is the source of truth** - All changes go through Git
+- ✅ **Automatic deployment** - Changes sync to cluster within 1 minute
+- ✅ **Full audit trail** - Git history = deployment history
+- ❌ **No manual kubectl/helm** - Use Git instead (see [Managing with Flux](docs/managing-with-flux.md))
+
+**Quick Links:**
+- 📖 [Managing Your Cluster with Flux](docs/managing-with-flux.md) - Complete guide
+- ⚡ [Flux Cheat Sheet](docs/flux-cheatsheet.md) - Quick reference
+- 🔧 [FluxCD Setup Guide](docs/fluxcd-guide.md) - Installation & concepts
+- 🆚 [GitOps Comparison](docs/gitops-comparison.md) - Flux vs Argo
+
 ## Repository Structure
 
 |Folder|Description|
 | ----------- | ----------- |
+|**clusters/homelab/**|**FluxCD cluster configuration (GitOps sync points)**|
+|**infrastructure/**|**FluxCD-managed infrastructure (Helm charts, sources)**|
 |k8s/core/namespaces|Kubernetes namespace definitions|
 |k8s/core/networking|Network configuration (MetalLB, etc.)|
 |k8s/core/storage|Storage configuration (NFS, StorageClasses)|
 |k8s/core/security|Security-related configurations (NetworkPolicies)|
 |k8s/cert-manager|TLS certificate management configuration|
-|k8s/helm|Helm chart values (Prometheus, Ingress NGINX)|
-|docs|Documentation (networking, GitOps guide)|
-|scripts/k3s|K3s cluster setup scripts (lightweight Kubernetes)
-|scripts/kubeadm|Kubeadm cluster setup scripts (full Kubernetes)
+|k8s/helm|Helm chart values (referenced by FluxCD)|
+|k8s/applications|Your applications (managed by FluxCD)|
+|docs|Documentation (GitOps guides, networking, management)|
+|scripts/k3s|K3s cluster setup scripts (lightweight Kubernetes)|
+|scripts/kubeadm|Kubeadm cluster setup scripts (full Kubernetes)|
 |scripts/common|Shared utilities (NFS, Helm, cert-manager, etc.)|
+|scripts/flux|FluxCD installation and bootstrap scripts|
 
 ## Available Scripts
 
@@ -30,13 +50,18 @@ This repo contains files and scripts for a Kubernetes homelab with support for b
 - **kubeadm/join-worker-node.sh** - Join worker to cluster
 - **kubeadm/teardown-cluster.sh** - Remove Kubernetes cluster
 
+### FluxCD GitOps (Recommended)
+- **flux/install-flux-cli.sh** - Install Flux CLI tool
+- **flux/bootstrap-flux.sh** - Bootstrap Flux to cluster (GitOps setup)
+- **flux/setup-flux-structure.sh** - Create FluxCD directory structure
+
 ### Common Utilities (All Cluster Types)
-- **common/install-helm-charts.sh** - Install complete application stack
-- **common/install-cert-manager.sh** - TLS certificate management
+- **common/install-helm-charts.sh** - Install complete application stack (⚠️ Use FluxCD instead)
+- **common/install-cert-manager.sh** - TLS certificate management (⚠️ FluxCD manages this)
 - **common/uninstall-all-helm-charts.sh** - Uninstall all Helm releases
 - **common/setup-nfs-server.sh** - Setup local NFS server
 - **common/setup-nfs-server-remote.sh** - Setup remote NFS server
-- **common/install-nfs-provisioner.sh** - NFS dynamic provisioner
+- **common/install-nfs-provisioner.sh** - NFS dynamic provisioner (⚠️ FluxCD manages this)
 - **common/verify-nfs-setup.sh** - Verify NFS configuration
 - **common/fix-worker-nfs-client.sh** - Install nfs-common on workers
 - **common/secure-nfs.sh** - Secure NFS exports
@@ -47,7 +72,29 @@ This repo contains files and scripts for a Kubernetes homelab with support for b
 
 ## Quick Start
 
-### Choose Your Kubernetes Distribution
+### Choose Your Path
+
+#### Option A: GitOps with FluxCD (Recommended ⭐)
+**Automated, Git-driven infrastructure management**
+
+```bash
+# 1. Setup Kubernetes cluster (choose K3s or Kubeadm below)
+
+# 2. Install Flux CLI
+./scripts/flux/install-flux-cli.sh
+
+# 3. Bootstrap FluxCD (connects Git to cluster)
+./scripts/flux/bootstrap-flux.sh
+
+# 4. Done! All infrastructure deploys automatically from Git
+# Watch deployment:
+flux get kustomizations -w
+```
+
+#### Option B: Manual Installation (Legacy)
+**Traditional kubectl/helm approach** ⚠️ Not recommended if using GitOps
+
+### Step 1: Choose Your Kubernetes Distribution
 
 #### Option 1: K3s (Recommended for beginners)
 K3s is lightweight, easy to install, and perfect for homelabs.
@@ -72,17 +119,30 @@ sudo ./scripts/kubeadm/setup-worker-node.sh
 sudo ./scripts/kubeadm/join-worker-node.sh
 ```
 
-### Setup NFS Storage
+### Step 2: Setup FluxCD GitOps (Recommended)
+
+**Install Flux and let Git manage your infrastructure:**
 
 ```bash
-# For remote NFS server
-./scripts/common/setup-nfs-server-remote.sh 192.168.100.98
+# Install Flux CLI
+./scripts/flux/install-flux-cli.sh
 
-# For local NFS server
-./scripts/common/setup-nfs-server.sh
+# Bootstrap Flux (one-time setup)
+./scripts/flux/bootstrap-flux.sh
+
+# That's it! All infrastructure deploys automatically:
+# - NFS Provisioner
+# - MetalLB
+# - Cert-Manager
+# - NGINX Ingress
+# - Prometheus Stack
 ```
 
-### Complete Application Stack Installation
+**OR use manual installation (not recommended):**
+
+### Complete Application Stack Installation (Manual - Legacy)
+
+⚠️ **Note:** If using FluxCD, skip this step. Flux manages all applications automatically.
 
 Install the entire homelab stack with a single command:
 
@@ -412,7 +472,38 @@ helm status prometheus -n monitoring  # Check specific release
 
 If your cluster goes down, rebuild it from this repository:
 
-**Full Cluster Rebuild Steps**:
+**Full Cluster Rebuild Steps (GitOps Method - Recommended)**:
+
+```bash
+# 1. Rebuild Kubernetes Cluster
+# For K3s:
+sudo ./scripts/k3s/setup-k3s-master.sh
+# For Kubeadm:
+sudo ./scripts/kubeadm/setup-master-node.sh
+
+# 2. Install Flux CLI
+./scripts/flux/install-flux-cli.sh
+
+# 3. Bootstrap FluxCD
+./scripts/flux/bootstrap-flux.sh
+
+# 4. Done! Everything deploys automatically from Git
+# - NFS Provisioner
+# - MetalLB
+# - NGINX Ingress
+# - Cert-Manager
+# - Prometheus Stack
+# - All your applications
+
+# Watch deployment progress:
+flux get kustomizations -w
+flux get helmreleases -A
+
+# Verify everything is running:
+kubectl get pods -A
+```
+
+**Full Cluster Rebuild Steps (Manual Method - Legacy)**:
 
 **For K3s:**
 ```bash
@@ -434,7 +525,7 @@ sudo ./scripts/kubeadm/setup-worker-node.sh
 sudo ./scripts/kubeadm/join-worker-node.sh
 ```
 
-**Setup NFS and Infrastructure** (both cluster types):
+**Setup NFS and Infrastructure** (manual method):
 ```bash
 # NFS storage (use your NFS server IP)
 ./scripts/common/setup-nfs-server-remote.sh <NFS-SERVER-IP>
@@ -443,22 +534,24 @@ sudo ./scripts/kubeadm/join-worker-node.sh
 ./scripts/common/install-helm-charts.sh
 ```
 
-5. **Restore Custom Configurations**:
-   - Update MetalLB IP pool if needed: `kubectl apply -f k8s/core/networking/metallb-config.yaml`
-   - Update MetalLB network interface in `k8s/core/networking/metallb-config.yaml`
-   - Update email for Let's Encrypt: `kubectl edit clusterissuer homelab-issuer`
-
 **What You Need to Backup Separately**:
 - Grafana dashboards (if customized)
 - Prometheus alerting rules (if customized)
 - Persistent data on NFS server (`/data/*`)
-- Any secrets not in this repo
+- **GitHub Personal Access Token** (for FluxCD bootstrap)
+- Any secrets not encrypted in this repo
 - Custom application configurations
 
-**Critical Files to Preserve**:
+**Critical Files to Preserve (Already in Git)**:
+- `clusters/homelab/` - FluxCD cluster configuration
+- `infrastructure/` - All Helm releases and sources
 - `k8s/core/networking/metallb-config.yaml` - Your IP pool configuration
 - `k8s/helm/*/values.yaml` - Customized Helm values
 - `k8s/cert-manager/cert-manager-issuers.yaml` - Certificate issuer email
+
+**Recovery Time**:
+- **With FluxCD**: ~10-15 minutes (automated)
+- **Manual Method**: ~30-45 minutes (manual steps)
 
 ### Configuration Checklist
 
