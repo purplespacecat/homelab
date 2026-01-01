@@ -10,10 +10,9 @@ This repo contains files and scripts for a Kubernetes homelab with support for b
 |k8s/core/networking|Network configuration (MetalLB, etc.)|
 |k8s/core/storage|Storage configuration (NFS, StorageClasses)|
 |k8s/core/security|Security-related configurations (NetworkPolicies)|
-|k8s/applications|Application deployments (Plex, Ollama, etc.)|
 |k8s/cert-manager|TLS certificate management configuration|
 |k8s/helm|Helm chart values (Prometheus, Ingress NGINX)|
-|network|Network configuration files including cloud-init setups|
+|docs|Documentation (networking, GitOps guide)|
 |scripts/k3s|K3s cluster setup scripts (lightweight Kubernetes)
 |scripts/kubeadm|Kubeadm cluster setup scripts (full Kubernetes)
 |scripts/common|Shared utilities (NFS, Helm, cert-manager, etc.)|
@@ -93,10 +92,10 @@ Install the entire homelab stack with a single command:
 
 This will install:
 1. NFS Subdir External Provisioner (dynamic storage)
-2. MetalLB (LoadBalancer support)
-3. Cert-Manager (TLS certificates)
-4. NGINX Ingress Controller
-5. Prometheus Stack (Prometheus, Grafana, Alertmanager)
+2. MetalLB (LoadBalancer support for non-HTTP services)
+3. Cert-Manager (TLS certificate management)
+4. NGINX Ingress Controller (hostNetwork mode for WiFi compatibility)
+5. Prometheus Stack (Prometheus, Grafana, Alertmanager, Node Exporter, Kube State Metrics)
 
 ### Verify Installation
 
@@ -121,11 +120,11 @@ To remove all helm-installed components:
 The monitoring stack (Prometheus, Grafana, Alertmanager) is installed automatically with `./scripts/common/install-helm-charts.sh`.
 
 **Access URLs** (after installation):
-- Prometheus: `http://prometheus.<INGRESS_IP>.nip.io`
-- Grafana: `http://grafana.<INGRESS_IP>.nip.io` (default: admin/admin)
-- Alertmanager: `http://alertmanager.<INGRESS_IP>.nip.io`
+- Prometheus: `http://prometheus.<NODE-IP>.nip.io`
+- Grafana: `http://grafana.<NODE-IP>.nip.io` (default: admin/admin)
+- Alertmanager: `http://alertmanager.<NODE-IP>.nip.io`
 
-Run `./scripts/common/verify-exposure.sh` to get the exact URLs for your cluster.
+Run `kubectl get nodes -o wide` to get your NODE-IP, or use `./scripts/common/verify-exposure.sh` to get the exact URLs.
 
 **Updating Prometheus Configuration**:
 ```bash
@@ -223,14 +222,14 @@ prometheus:
       cert-manager.io/cluster-issuer: "homelab-ca-issuer"
       nginx.ingress.kubernetes.io/ssl-redirect: "true"  # Change from "false" to "true"
     hosts:
-      - "prometheus.192.168.100.200.nip.io"
+      - "prometheus.<NODE-IP>.nip.io"
     paths:
       - "/"
     pathType: Prefix
     tls:  # Add this section
       - secretName: prometheus-tls
         hosts:
-          - "prometheus.192.168.100.200.nip.io"
+          - "prometheus.<NODE-IP>.nip.io"
 ```
 
 Apply the changes:
@@ -251,8 +250,8 @@ Services are exposed using **NGINX Ingress Controller in hostNetwork mode** + **
 
 **Current Architecture** (optimized for WiFi networks):
 1. **NGINX Ingress**: Runs with `hostNetwork: true`, binding directly to the node IP
-2. **Node IP**: `192.168.100.98` (your K3s node - check with `kubectl get nodes -o wide`)
-3. **nip.io**: Wildcard DNS (e.g., `service.192.168.100.98.nip.io` → `192.168.100.98`)
+2. **Node IP**: Check with `kubectl get nodes -o wide` to get your node's INTERNAL-IP
+3. **nip.io**: Wildcard DNS (e.g., `service.<NODE-IP>.nip.io` → `<NODE-IP>`)
 
 **Why hostNetwork mode?**
 - MetalLB L2 mode doesn't work reliably over WiFi interfaces
@@ -269,10 +268,10 @@ kubectl get nodes -o wide
 
 **Accessing Services**:
 
-Services can be accessed via nip.io domains using your node IP:
-- `http://prometheus.192.168.100.98.nip.io`
-- `http://grafana.192.168.100.98.nip.io`
-- `http://alertmanager.192.168.100.98.nip.io`
+Services can be accessed via nip.io domains using your node IP (get it with `kubectl get nodes -o wide`):
+- `http://prometheus.<NODE-IP>.nip.io`
+- `http://grafana.<NODE-IP>.nip.io`
+- `http://alertmanager.<NODE-IP>.nip.io`
 
 **How nip.io works**: It's a magic DNS service that automatically resolves any hostname containing an IP to that IP. No configuration needed!
 
@@ -280,12 +279,12 @@ If nip.io doesn't work on your network, add entries to your hosts file:
 
 **Windows**: Edit `C:\Windows\System32\drivers\etc\hosts` (as Administrator)
 ```
-192.168.100.98 prometheus.local grafana.local alertmanager.local
+<NODE-IP> prometheus.local grafana.local alertmanager.local
 ```
 
 **Linux/Mac**: Edit `/etc/hosts` (with sudo)
 ```
-192.168.100.98 prometheus.local grafana.local alertmanager.local
+<NODE-IP> prometheus.local grafana.local alertmanager.local
 ```
 
 Then access services via:
@@ -305,7 +304,7 @@ metadata:
 spec:
   ingressClassName: nginx  # Use this instead of deprecated annotation
   rules:
-  - host: myservice.192.168.100.98.nip.io  # Use your node IP
+  - host: myservice.<NODE-IP>.nip.io  # Use your node IP from kubectl get nodes -o wide
     http:
       paths:
       - path: /
@@ -435,19 +434,19 @@ sudo ./scripts/kubeadm/setup-worker-node.sh
 sudo ./scripts/kubeadm/join-worker-node.sh
 ```
 
-**Setup NFS and Applications** (both cluster types):
+**Setup NFS and Infrastructure** (both cluster types):
 ```bash
-# NFS storage
-./scripts/common/setup-nfs-server-remote.sh 192.168.100.98
+# NFS storage (use your NFS server IP)
+./scripts/common/setup-nfs-server-remote.sh <NFS-SERVER-IP>
 
-# Application stack
+# Infrastructure stack (MetalLB, Ingress, Cert-Manager, Prometheus)
 ./scripts/common/install-helm-charts.sh
 ```
 
 5. **Restore Custom Configurations**:
    - Update MetalLB IP pool if needed: `kubectl apply -f k8s/core/networking/metallb-config.yaml`
+   - Update MetalLB network interface in `k8s/core/networking/metallb-config.yaml`
    - Update email for Let's Encrypt: `kubectl edit clusterissuer homelab-issuer`
-   - Apply any custom application deployments from `k8s/applications/`
 
 **What You Need to Backup Separately**:
 - Grafana dashboards (if customized)

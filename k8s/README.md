@@ -1,27 +1,24 @@
 # Kubernetes Resources Documentation
 
-This document provides an overview of all Kubernetes resources defined in this repository for the kubeadm homelab setup. It explains the purpose and functionality of each resource.
+This document provides an overview of all Kubernetes resources defined in this repository for the homelab setup. It explains the purpose and functionality of each resource.
 
 ## Important Notes
 
 ### Networking Architecture
 
 This homelab uses **NGINX Ingress in hostNetwork mode** due to WiFi compatibility:
-- NGINX binds directly to the node IP (`192.168.100.98`)
+- NGINX binds directly to the node IP (check with `kubectl get nodes -o wide`)
 - Service type: ClusterIP (not LoadBalancer)
-- All Ingress hostnames should use: `service-name.192.168.100.98.nip.io`
+- All Ingress hostnames should use: `service-name.<NODE-IP>.nip.io`
 
 **For detailed networking documentation**, see [../docs/NETWORKING.md](../docs/NETWORKING.md)
 
-### Kubeadm Migration
+### Installation Method
 
-This repository has been migrated from K3s to **kubeadm**. All K3s-specific configurations (like HelmChart CRDs) have been removed and replaced with standard Helm CLI installations.
-
-**Key Changes:**
-- All Helm charts are now installed via `helm` CLI commands
-- Storage class standardized to `nfs-client` (provided by NFS provisioner)
-- No K3s-specific `local-storage` or HelmChart CRDs
-- Installation scripts handle all component deployments
+All infrastructure components are installed via **Helm CLI** (not Kustomize or HelmChart CRDs):
+- Installation scripts in `../scripts/common/` handle all deployments
+- Storage class: `nfs-client` (provided by NFS provisioner, set as default)
+- K3s includes `local-path` storage class, but NFS is preferred for persistent data
 
 ## Directory Structure
 
@@ -38,17 +35,11 @@ k8s/
 │   │   └── nfs-config.yaml          # NFS server configuration
 │   └── security/                   # Security-related configurations
 │       └── network-policies.yaml
-├── applications/                   # Application deployments
-│   ├── crypto/                     # Cryptocurrency dashboard
-│   │   └── crypto-data-app-deployment.yaml
-│   └── kafka/                      # Kafka-related applications
 ├── cert-manager/                   # TLS certificate management
 │   ├── cert-manager-issuers.yaml   # Let's Encrypt issuer
 │   └── local-ca.yaml               # Local CA for homelab
 └── helm/                           # Helm chart values
     ├── ingress-nginx/
-    │   └── values.yaml
-    ├── kafka/
     │   └── values.yaml
     └── prometheus/
         └── values.yaml             # Includes Grafana configuration
@@ -132,14 +123,6 @@ Sets up a local Certificate Authority for the homelab:
 - **homelab-ca**: Root CA certificate with ECDSA private key
 - **homelab-ca-issuer**: Issues certificates signed by the local CA
 
-## Application Deployments
-
-### `applications/crypto/crypto-data-app-deployment.yaml`
-Deploys a cryptocurrency price dashboard:
-- **Deployment**: Single replica running `spacecrab/crypto-price-dashboard` image
-- **Service**: ClusterIP exposing port 8501
-- **Ingress**: Makes the app available at `crypto.local`
-
 ## Helm Chart Values
 
 ### `helm/prometheus/values.yaml`
@@ -149,20 +132,19 @@ Configures the Prometheus monitoring stack (includes Prometheus, Grafana, and Al
    - **Storage**: Uses 10Gi PV with `nfs-client` StorageClass
    - **Retention**: 30 days data retention
    - **Resources**: Requests 500m CPU, 512Mi memory; limits to 1000m CPU, 1Gi memory
-   - **Ingress**: Exposes at `prometheus.local` and `prometheus.192.168.100.98.nip.io`
-   - **TLS**: Configured with `homelab-ca-issuer`
+   - **Ingress**: Exposes at `prometheus.local` and `prometheus.<NODE-IP>.nip.io`
+   - **TLS**: Can be configured with `homelab-ca-issuer` (optional)
 
 2. **Grafana** (bundled with Prometheus stack):
    - **Storage**: 10Gi persistent storage with `nfs-client` StorageClass
-   - **Ingress**: Configured at `grafana.local` and `grafana.192.168.100.98.nip.io`
+   - **Ingress**: Configured at `grafana.local` and `grafana.<NODE-IP>.nip.io`
    - **Security**: Uses a Kubernetes secret for admin credentials
-   - **TLS**: Configured with `homelab-ca-issuer`
-   - **Note**: This is the primary Grafana configuration; separate grafana/values.yaml has been removed
+   - **TLS**: Can be configured with `homelab-ca-issuer` (optional)
 
 3. **AlertManager**:
    - **Storage**: 10Gi with `nfs-client` StorageClass for each replica
-   - **Ingress**: Available at `alertmanager.local` and `alertmanager.192.168.100.98.nip.io`
-   - **TLS**: Configured with `homelab-ca-issuer`
+   - **Ingress**: Available at `alertmanager.local` and `alertmanager.<NODE-IP>.nip.io`
+   - **TLS**: Can be configured with `homelab-ca-issuer` (optional)
 
 4. **Exporters**:
    - **Node Exporter**: Enabled to collect host metrics
@@ -179,13 +161,6 @@ NGINX Ingress Controller configuration:
   - Max body size: 100m
   - Timeouts: 300 seconds for read/send operations
 - **Resources**: Requests 100m CPU, 128Mi memory; limits to 500m CPU, 512Mi memory
-
-### `helm/kafka/values.yaml`
-Configuration for Kafka-related applications:
-- **Kafka Broker**: `kafka.kafka.svc.cluster.local:9092`
-- **Topic**: `crypto-prices`
-- **Data Source**: CoinGecko API for Bitcoin and Ethereum prices
-- **Poll Interval**: 10 seconds
 
 ## Best Practices Used
 
@@ -265,10 +240,6 @@ If installing components manually, follow this order:
      -f helm/prometheus/values.yaml
    ```
 
-7. **Applications**: Deploy your applications
-   ```bash
-   kubectl apply -f applications/
-   ```
 
 ## Uninstallation
 

@@ -25,7 +25,7 @@ The magic happens in the hostname itself:
 
 - `prometheus.192.168.100.98.nip.io` → Resolves to `192.168.100.98`
 - `grafana.192.168.100.98.nip.io` → Resolves to `192.168.100.98`
-- `anything.10.0.0.50.nip.io` → Resolves to `10.0.0.50`
+- `anything.<YOUR-IP>.nip.io` → Resolves to `<YOUR-IP>`
 
 **You don't configure anything!** It's just a DNS trick. The nip.io DNS servers parse the IP from the hostname and return it.
 
@@ -82,13 +82,11 @@ controller:
 
 ### Node Information
 
-Current cluster setup:
+Get your current node IP:
 ```bash
-NAME        INTERNAL-IP      EXTERNAL-IP
-spaceship   192.168.100.98   <none>
+kubectl get nodes -o wide
+# Check the INTERNAL-IP column
 ```
-
-**Your node IP**: `192.168.100.98`
 
 This is the IP where NGINX listens for incoming traffic.
 
@@ -101,17 +99,17 @@ This is the IP where NGINX listens for incoming traffic.
 │  User Browser   │
 └────────┬────────┘
          │
-         │ 1. DNS query: prometheus.192.168.100.98.nip.io
+         │ 1. DNS query: prometheus.<NODE-IP>.nip.io
          ↓
 ┌─────────────────┐
-│  nip.io DNS     │  Returns: 192.168.100.98
+│  nip.io DNS     │  Returns: <NODE-IP>
 └────────┬────────┘
          │
-         │ 2. HTTP request to 192.168.100.98:80
+         │ 2. HTTP request to <NODE-IP>:80
          ↓
 ┌─────────────────┐
-│  Node (K3s)     │  IP: 192.168.100.98
-│  192.168.100.98 │
+│  Node (K3s)     │  IP: <NODE-IP>
+│  <NODE-IP>      │
 └────────┬────────┘
          │
          │ 3. NGINX (hostNetwork mode) listening on port 80/443
@@ -168,41 +166,28 @@ For services that don't use HTTP (databases, etc.), you can still use MetalLB:
 
 ## IP Address Usage
 
-### Current IPs
+### IP Address Allocation
 
-| IP Address        | Usage                          | Type          |
+| Type              | Usage                          | How to Get    |
 |-------------------|--------------------------------|---------------|
-| 192.168.100.98    | K3s node (spaceship)           | Node IP       |
-| 192.168.100.98    | NGINX Ingress (hostNetwork)    | Same as node  |
-| 192.168.100.200   | Traefik (K3s default ingress)  | MetalLB       |
-| 192.168.100.200-250 | MetalLB IP pool              | Available IPs |
+| Node IP           | K3s/kubeadm node               | `kubectl get nodes -o wide` |
+| NGINX Ingress     | hostNetwork (same as node IP)  | Same as node IP |
+| Traefik           | K3s default ingress (optional) | MetalLB assigned |
+| MetalLB pool      | LoadBalancer services          | Configured in metallb-config.yaml |
 
 ### Which IP Should You Use?
 
-**For web applications (HTTP/HTTPS)**: Use `192.168.100.98` (the node IP)
-- All Ingress hostnames should use: `service-name.192.168.100.98.nip.io`
+**For web applications (HTTP/HTTPS)**: Use your node IP (get with `kubectl get nodes -o wide`)
+- All Ingress hostnames should use: `service-name.<NODE-IP>.nip.io`
 - Examples:
-  - `prometheus.192.168.100.98.nip.io`
-  - `grafana.192.168.100.98.nip.io`
-  - `ollama.192.168.100.98.nip.io`
+  - `prometheus.<NODE-IP>.nip.io`
+  - `grafana.<NODE-IP>.nip.io`
+  - `myapp.<NODE-IP>.nip.io`
 
-**For non-HTTP services**: Use MetalLB pool IPs (192.168.100.200+)
+**For non-HTTP services**: Use MetalLB pool IPs
 - Set service type to `LoadBalancer`
-- MetalLB will assign an IP from the pool
+- MetalLB will assign an IP from the configured pool
 - Access directly via the assigned IP
-
-### Wrong IPs in Configs
-
-Some files currently reference `192.168.100.202` - this should be updated to `192.168.100.98`:
-
-```bash
-# Files that need updating:
-k8s/applications/trackster/trackster-deployment.yaml
-k8s/applications/ollama/ollama-deployment.yaml
-k8s/ml-stack/jupyterhub/values.yaml
-k8s/ml-stack/mlflow/mlflow-deployment.yaml
-# ... and others
-```
 
 ## Ingress Configuration Examples
 
@@ -219,7 +204,7 @@ metadata:
 spec:
   ingressClassName: nginx
   rules:
-  - host: my-app.192.168.100.98.nip.io  # Use node IP
+  - host: my-app.<NODE-IP>.nip.io  # Use your node IP
     http:
       paths:
       - path: /
@@ -246,10 +231,10 @@ spec:
   ingressClassName: nginx
   tls:
   - hosts:
-    - my-app.192.168.100.98.nip.io
+    - my-app.<NODE-IP>.nip.io
     secretName: my-app-tls  # cert-manager creates this
   rules:
-  - host: my-app.192.168.100.98.nip.io
+  - host: my-app.<NODE-IP>.nip.io
     http:
       paths:
       - path: /
@@ -334,8 +319,8 @@ spec:
 
 3. **Test DNS resolution**:
    ```bash
-   nslookup grafana.192.168.100.98.nip.io
-   # Should return 192.168.100.98
+   nslookup grafana.<NODE-IP>.nip.io
+   # Should return <NODE-IP>
    ```
 
 4. **Check port binding**:
@@ -362,13 +347,13 @@ spec:
    # Windows (as Administrator)
    notepad C:\Windows\System32\drivers\etc\hosts
 
-   # Add:
-   192.168.100.98 prometheus.local grafana.local alertmanager.local
+   # Add (replace <NODE-IP> with your actual node IP):
+   <NODE-IP> prometheus.local grafana.local alertmanager.local
    ```
 
 3. **Check if network blocks external DNS**:
    ```bash
-   dig @8.8.8.8 grafana.192.168.100.98.nip.io
+   dig @8.8.8.8 grafana.<NODE-IP>.nip.io
    # If this works but regular DNS doesn't, your network might block nip.io
    ```
 
@@ -441,9 +426,9 @@ spec:
 
 ## Summary
 
-- **Node IP**: `192.168.100.98` (your K3s node)
+- **Node IP**: Get with `kubectl get nodes -o wide` (INTERNAL-IP column)
 - **NGINX Mode**: `hostNetwork: true` (binds to node IP)
 - **Service Type**: ClusterIP (not LoadBalancer)
-- **DNS**: nip.io automatically resolves `*.192.168.100.98.nip.io` → `192.168.100.98`
-- **All Ingress hostnames** should use: `service-name.192.168.100.98.nip.io`
-- **MetalLB**: Available for non-HTTP services, IP pool: 192.168.100.200-250
+- **DNS**: nip.io automatically resolves `*.<NODE-IP>.nip.io` → `<NODE-IP>`
+- **All Ingress hostnames** should use: `service-name.<NODE-IP>.nip.io`
+- **MetalLB**: Available for non-HTTP services, configure IP pool in `k8s/core/networking/metallb-config.yaml`

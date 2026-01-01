@@ -168,16 +168,8 @@ Argo CD Application Hierarchy:
     │   └── ingress-nginx          → Helm chart + k8s/helm/ingress-nginx/values.yaml
     ├── security
     │   └── cert-manager           → Helm chart + k8s/cert-manager/*.yaml
-    ├── monitoring
-    │   └── prometheus-stack       → Helm chart + k8s/helm/prometheus/values.yaml
-    ├── applications
-    │   ├── ollama                 → k8s/applications/ollama/*.yaml
-    │   ├── trackster              → k8s/applications/trackster/*.yaml
-    │   └── plex                   → k8s/applications/plex/*.yaml
-    └── ml-stack
-        ├── jupyterhub             → Helm chart + k8s/ml-stack/jupyterhub/values.yaml
-        ├── mlflow                 → k8s/ml-stack/mlflow/*.yaml
-        └── open-webui             → Helm chart + k8s/ml-stack/open-webui/values.yaml
+    └── monitoring
+        └── prometheus-stack       → Helm chart + k8s/helm/prometheus/values.yaml
 ```
 
 ### Proposed Directory Structure
@@ -205,16 +197,8 @@ homelab/
     │   └── ingress-nginx.yaml
     ├── security/
     │   └── cert-manager.yaml
-    ├── monitoring/
-    │   └── prometheus-stack.yaml
-    ├── applications/
-    │   ├── ollama.yaml
-    │   ├── trackster.yaml
-    │   └── plex.yaml
-    └── ml-stack/
-        ├── jupyterhub.yaml
-        ├── mlflow.yaml
-        └── open-webui.yaml
+    └── monitoring/
+        └── prometheus-stack.yaml
 ```
 
 ## Implementation Examples
@@ -260,36 +244,7 @@ spec:
         maxDuration: 3m
 ```
 
-### Example 2: Applications (Raw YAML)
-
-**File:** `argocd/applications/ollama.yaml`
-
-```yaml
-apiVersion: argoproj.io/v1alpha1
-kind: Application
-metadata:
-  name: ollama
-  namespace: argocd
-  finalizers:
-    - resources-finalizer.argocd.argoproj.io
-spec:
-  project: homelab
-  source:
-    repoURL: https://github.com/youruser/homelab.git
-    targetRevision: main
-    path: k8s/applications/ollama
-  destination:
-    server: https://kubernetes.default.svc
-    namespace: default
-  syncPolicy:
-    automated:
-      prune: true
-      selfHeal: true
-    syncOptions:
-      - CreateNamespace=true
-```
-
-### Example 3: App of Apps (Bootstrap)
+### Example 2: App of Apps (Bootstrap)
 
 **File:** `argocd/bootstrap/root-app.yaml`
 
@@ -332,7 +287,7 @@ helm upgrade --install prometheus prometheus-community/kube-prometheus-stack \
 
 # Apply raw YAML manifests
 kubectl apply -f k8s/core/namespaces/
-kubectl apply -f k8s/applications/ollama/
+kubectl apply -f k8s/cert-manager/
 
 # Update configuration
 vim k8s/helm/prometheus/values.yaml
@@ -429,7 +384,7 @@ metadata:
 spec:
   ingressClassName: nginx
   rules:
-  - host: argocd.192.168.100.98.nip.io
+  - host: argocd.<NODE-IP>.nip.io  # Replace with your node IP
     http:
       paths:
       - path: /
@@ -454,8 +409,8 @@ curl -sSL -o argocd-linux-amd64 https://github.com/argoproj/argo-cd/releases/lat
 sudo install -m 555 argocd-linux-amd64 /usr/local/bin/argocd
 rm argocd-linux-amd64
 
-# Login
-argocd login argocd.192.168.100.98.nip.io --username admin --password <password>
+# Login (replace <NODE-IP> with your actual node IP)
+argocd login argocd.<NODE-IP>.nip.io --username admin --password <password>
 ```
 
 ### 4. Create Argo CD Project
@@ -511,23 +466,23 @@ This will create all Applications which will then sync your entire infrastructur
    - Let both manual and GitOps coexist
    - Verify sync works correctly
 
-2. **Phase 2: New Applications**
-   - Deploy new apps only via Argo CD
-   - Gain confidence with the workflow
-
-3. **Phase 3: Core Infrastructure**
+2. **Phase 2: Core Infrastructure**
    - Migrate networking, storage, cert-manager
    - Test rollbacks and sync
 
-4. **Phase 4: Full GitOps**
-   - Remove manual scripts
-   - Everything managed by Argo CD
+3. **Phase 3: Full GitOps**
+   - All infrastructure managed by Argo CD
+   - Keep scripts as backup for disaster recovery
+
+4. **Phase 4: Add New Applications**
+   - Deploy new apps via Argo CD as needed
+   - Follow the same GitOps workflow
 
 **Quick Migration:**
-1. Create all Application manifests
+1. Create Application manifests for existing infrastructure
 2. Deploy bootstrap app
 3. Let Argo CD take over management
-4. Keep scripts as backup for disaster recovery
+4. Keep installation scripts as backup for disaster recovery
 
 ## Alternative: Flux CD
 
