@@ -60,20 +60,16 @@ spec:
               prefix: index_
               period: 24h
 
-      # Compactor with retention
+      # Compactor configuration (retention disabled for now - manual cleanup needed)
       compactor:
         working_directory: /var/loki/compactor
-        retention_enabled: true
-        retention_delete_delay: 2h
-        retention_delete_worker_count: 150
         compaction_interval: 10m
 
       # Limits configuration
       limits_config:
-        retention_period: 48h
-        max_query_lookback: 48h
+        max_query_lookback: 720h  # 30 days lookback
         reject_old_samples: true
-        reject_old_samples_max_age: 168h
+        reject_old_samples_max_age: 720h
         ingestion_rate_mb: 4
         ingestion_burst_size_mb: 6
 
