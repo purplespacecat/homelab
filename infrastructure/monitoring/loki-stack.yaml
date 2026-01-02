@@ -62,11 +62,15 @@ spec:
         retention_enabled: true
         retention_delete_delay: 2h
         retention_delete_worker_count: 150
+        delete_request_store: filesystem
 
       # Storage retention
       storage_config:
         filesystem:
           directory: /var/loki/chunks
+        boltdb_shipper:
+          active_index_directory: /var/loki/index
+          cache_location: /var/loki/cache
 
     # Enable monitoring
     monitoring:
