@@ -18,6 +18,11 @@ spec:
     prometheus:
       prometheusSpec:
         retention: 2d
+        # Allow Prometheus to discover ServiceMonitors in all namespaces
+        serviceMonitorNamespaceSelector: {}
+        serviceMonitorSelector: {}
+        podMonitorNamespaceSelector: {}
+        podMonitorSelector: {}
         storageSpec:
           volumeClaimTemplate:
             spec:
