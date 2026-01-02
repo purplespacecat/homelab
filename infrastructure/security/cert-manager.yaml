@@ -34,8 +34,6 @@ metadata:
   namespace: flux-system
 spec:
   interval: 10m
-  dependsOn:
-    - name: security
   sourceRef:
     kind: GitRepository
     name: flux-system
