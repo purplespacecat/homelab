@@ -35,9 +35,19 @@ spec:
 
     # Loki configuration
     loki:
+      # Auth - disable for homelab
+      auth_enabled: false
+
       # Storage configuration
+      commonConfig:
+        replication_factor: 1
+        path_prefix: /var/loki
+
       storage:
         type: filesystem
+        filesystem:
+          chunks_directory: /var/loki/chunks
+          rules_directory: /var/loki/rules
 
       # Schema configuration
       schemaConfig:
@@ -50,27 +60,22 @@ spec:
               prefix: index_
               period: 24h
 
-      # Limits configuration
-      limits_config:
-        retention_period: 48h  # 2 days retention
-        max_query_lookback: 48h
-        reject_old_samples: true
-        reject_old_samples_max_age: 168h
-
-      # Compactor for cleanup
+      # Compactor with retention
       compactor:
+        working_directory: /var/loki/compactor
         retention_enabled: true
         retention_delete_delay: 2h
         retention_delete_worker_count: 150
-        delete_request_store: filesystem
+        compaction_interval: 10m
 
-      # Storage retention
-      storage_config:
-        filesystem:
-          directory: /var/loki/chunks
-        boltdb_shipper:
-          active_index_directory: /var/loki/index
-          cache_location: /var/loki/cache
+      # Limits configuration
+      limits_config:
+        retention_period: 48h
+        max_query_lookback: 48h
+        reject_old_samples: true
+        reject_old_samples_max_age: 168h
+        ingestion_rate_mb: 4
+        ingestion_burst_size_mb: 6
 
     # Enable monitoring
     monitoring:
@@ -104,6 +109,16 @@ spec:
 
     # Disable minio (using filesystem storage)
     minio:
+      enabled: false
+
+    # Disable memory-intensive cache components (use local caching only)
+    chunksCache:
+      enabled: false
+    resultsCache:
+      enabled: false
+
+    # Disable canary for homelab
+    lokiCanary:
       enabled: false
 
     # Test pods
