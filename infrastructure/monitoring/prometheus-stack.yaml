@@ -107,6 +107,8 @@ spec:
     prometheusOperator:
       admissionWebhooks:
         enabled: false
+      tls:
+        enabled: false
   install:
     createNamespace: true
     remediation:
