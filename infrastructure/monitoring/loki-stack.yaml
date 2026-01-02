@@ -1,0 +1,193 @@
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: loki
+  namespace: monitoring
+spec:
+  interval: 5m
+  chart:
+    spec:
+      chart: loki
+      version: 6.24.0
+      sourceRef:
+        kind: HelmRepository
+        name: grafana
+        namespace: flux-system
+  values:
+    # Deployment mode - single binary for simplicity in homelab
+    deploymentMode: SingleBinary
+
+    # Single binary configuration
+    singleBinary:
+      replicas: 1
+      resources:
+        requests:
+          cpu: 100m
+          memory: 256Mi
+        limits:
+          cpu: 500m
+          memory: 512Mi
+      persistence:
+        enabled: true
+        storageClass: nfs-client
+        size: 10Gi
+
+    # Loki configuration
+    loki:
+      # Storage configuration
+      storage:
+        type: filesystem
+
+      # Schema configuration
+      schemaConfig:
+        configs:
+          - from: "2024-01-01"
+            store: tsdb
+            object_store: filesystem
+            schema: v13
+            index:
+              prefix: index_
+              period: 24h
+
+      # Limits configuration
+      limits_config:
+        retention_period: 48h  # 2 days retention
+        max_query_lookback: 48h
+        reject_old_samples: true
+        reject_old_samples_max_age: 168h
+
+      # Compactor for cleanup
+      compactor:
+        retention_enabled: true
+        retention_delete_delay: 2h
+        retention_delete_worker_count: 150
+
+      # Storage retention
+      storage_config:
+        filesystem:
+          directory: /var/loki/chunks
+
+    # Enable monitoring
+    monitoring:
+      serviceMonitor:
+        enabled: true
+        interval: 30s
+      selfMonitoring:
+        enabled: false
+        grafanaAgent:
+          installOperator: false
+
+    # Disable unnecessary components for single binary mode
+    backend:
+      replicas: 0
+    read:
+      replicas: 0
+    write:
+      replicas: 0
+
+    # Gateway configuration (NGINX)
+    gateway:
+      enabled: true
+      replicas: 1
+      resources:
+        requests:
+          cpu: 50m
+          memory: 64Mi
+        limits:
+          cpu: 200m
+          memory: 128Mi
+
+    # Disable minio (using filesystem storage)
+    minio:
+      enabled: false
+
+    # Test pods
+    test:
+      enabled: false
+
+  install:
+    remediation:
+      retries: 3
+  upgrade:
+    remediation:
+      retries: 3
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: promtail
+  namespace: monitoring
+spec:
+  interval: 5m
+  chart:
+    spec:
+      chart: promtail
+      version: 6.16.6
+      sourceRef:
+        kind: HelmRepository
+        name: grafana
+        namespace: flux-system
+  dependsOn:
+    - name: loki
+  values:
+    # Promtail configuration
+    config:
+      # Send logs to Loki
+      clients:
+        - url: http://loki-gateway/loki/api/v1/push
+
+      # Scrape configs
+      snippets:
+        scrapeConfigs: |
+          # Pods with logging enabled
+          - job_name: kubernetes-pods
+            pipeline_stages:
+              - cri: {}
+            kubernetes_sd_configs:
+              - role: pod
+            relabel_configs:
+              # Only scrape local pods
+              - source_labels:
+                  - __meta_kubernetes_pod_node_name
+                target_label: __host__
+              - action: labelmap
+                regex: __meta_kubernetes_pod_label_(.+)
+              - source_labels:
+                  - __meta_kubernetes_namespace
+                target_label: namespace
+              - source_labels:
+                  - __meta_kubernetes_pod_name
+                target_label: pod
+              - source_labels:
+                  - __meta_kubernetes_pod_container_name
+                target_label: container
+              - replacement: /var/log/pods/*$1/*.log
+                separator: /
+                source_labels:
+                  - __meta_kubernetes_pod_uid
+                  - __meta_kubernetes_pod_container_name
+                target_label: __path__
+
+    # Resources
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 200m
+        memory: 128Mi
+
+    # Enable service monitor
+    serviceMonitor:
+      enabled: true
+      interval: 30s
+
+    # Default volumes are OK - promtail will read from /var/log/pods
+
+  install:
+    remediation:
+      retries: 3
+  upgrade:
+    remediation:
+      retries: 3
