@@ -181,3 +181,5 @@ spec:
       port: 53  # DNS
     - protocol: UDP
       port: 53
+    - protocol: TCP
+      port: 443  # Kubernetes API server (for pod discovery)
