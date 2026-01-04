@@ -2,6 +2,27 @@
 
 This repo contains files and scripts for a Kubernetes homelab with support for both **K3s** and **kubeadm**.
 
+## Table of Contents
+
+- [GitOps Active with FluxCD](#-gitops-active-with-fluxcd)
+- [Repository Structure](#repository-structure)
+- [Current Cluster Information](#current-cluster-information)
+- [Deployed Infrastructure](#deployed-infrastructure)
+- [Available Scripts](#available-scripts)
+- [Quick Start](#quick-start)
+- [Detailed Setup Guides](#detailed-setup-guides)
+  - [Monitoring Stack Setup](#monitoring-stack-setup)
+  - [Logging Stack Setup (Loki)](#logging-stack-setup-loki)
+  - [TLS/HTTPS Setup with Cert-Manager](#tlshttps-setup-with-cert-manager-optional)
+  - [Exposing Services to Local Network](#exposing-services-to-local-network)
+- [Troubleshooting](#troubleshooting)
+- [Architecture & Workflows](#architecture--workflows)
+  - [Networking Flow](#networking-flow)
+  - [Helm Workflow](#helm-workflow)
+  - [Disaster Recovery & Cluster Rebuild](#disaster-recovery--cluster-rebuild)
+- [Configuration Checklist](#configuration-checklist)
+- [Important Notes](#important-notes)
+
 ## 🚀 GitOps Active with FluxCD
 
 **This cluster is now managed by FluxCD GitOps!** All infrastructure is automatically deployed and synchronized from this Git repository.
@@ -36,6 +57,47 @@ This repo contains files and scripts for a Kubernetes homelab with support for b
 |scripts/kubeadm|Kubeadm cluster setup scripts (full Kubernetes)|
 |scripts/common|Shared utilities (NFS, Helm, cert-manager, etc.)|
 |scripts/flux|FluxCD installation and bootstrap scripts|
+
+## Current Cluster Information
+
+**Cluster Details:**
+- **Distribution**: K3s v1.33.6
+- **Node**: spaceship (control-plane, single-node cluster)
+- **Node IP**: 192.168.100.98
+- **OS**: Ubuntu 22.04.5 LTS
+- **Kernel**: 6.8.0-90-generic
+- **Container Runtime**: containerd 2.1.5
+
+**Management:**
+- **GitOps**: FluxCD (all infrastructure managed via Git)
+- **Repository**: All configurations in this Git repo
+
+## Deployed Infrastructure
+
+All components are managed by FluxCD and automatically deployed from this repository:
+
+**Core Infrastructure:**
+- **NFS Provisioner** (kube-system) - Dynamic storage provisioning
+- **MetalLB** (metallb-system) - LoadBalancer support (IP pool: 192.168.100.200-250)
+- **Cert-Manager** (cert-manager) - TLS certificate management
+- **NGINX Ingress** (ingress-nginx) - HTTP/HTTPS routing (hostNetwork mode)
+
+**Monitoring & Logging:**
+- **Prometheus Stack** (monitoring) - Metrics collection and alerting
+  - Prometheus - Metrics database
+  - Grafana - Dashboards and visualization
+  - Alertmanager - Alert routing
+  - Node Exporter - Node metrics
+  - Kube State Metrics - Kubernetes metrics
+- **Loki Stack** (monitoring) - Log aggregation and querying
+  - Loki - Log storage and querying
+  - Promtail - Log collection from all pods
+  - See [Loki Setup Guide](docs/loki-setup-guide.md) for details
+
+**Access URLs:**
+- Grafana: `http://grafana.192.168.100.98.nip.io` (default: admin/admin)
+- Prometheus: `http://prometheus.192.168.100.98.nip.io`
+- Alertmanager: `http://alertmanager.192.168.100.98.nip.io`
 
 ## Available Scripts
 
@@ -177,25 +239,78 @@ To remove all helm-installed components:
 
 ### Monitoring Stack Setup
 
-The monitoring stack (Prometheus, Grafana, Alertmanager) is installed automatically with `./scripts/common/install-helm-charts.sh`.
+The monitoring stack (Prometheus, Grafana, Alertmanager) is automatically deployed via FluxCD.
 
-**Access URLs** (after installation):
-- Prometheus: `http://prometheus.<NODE-IP>.nip.io`
-- Grafana: `http://grafana.<NODE-IP>.nip.io` (default: admin/admin)
-- Alertmanager: `http://alertmanager.<NODE-IP>.nip.io`
+**Current Stack (deployed):**
+- Prometheus: `http://prometheus.192.168.100.98.nip.io`
+- Grafana: `http://grafana.192.168.100.98.nip.io` (default: admin/admin)
+- Alertmanager: `http://alertmanager.192.168.100.98.nip.io`
 
-Run `kubectl get nodes -o wide` to get your NODE-IP, or use `./scripts/common/verify-exposure.sh` to get the exact URLs.
+**GitOps Management:**
 
-**Updating Prometheus Configuration**:
+All Prometheus stack configuration is managed through Git. To update:
+
 ```bash
 # Edit the values file
-vi k8s/helm/prometheus/values.yaml
+vi infrastructure/monitoring/prometheus-stack.yaml
 
-# Apply changes
-helm upgrade prometheus prometheus-community/kube-prometheus-stack \
-  -n monitoring \
-  -f k8s/helm/prometheus/values.yaml
+# Commit changes
+git add infrastructure/monitoring/prometheus-stack.yaml
+git commit -m "Update Prometheus configuration"
+
+# Flux will automatically apply changes (or force reconcile)
+flux reconcile helmrelease -n monitoring prometheus-stack
 ```
+
+**Verify Deployment:**
+```bash
+kubectl get helmrelease -n monitoring
+kubectl get pods -n monitoring
+```
+
+### Logging Stack Setup (Loki)
+
+The Loki logging stack is automatically deployed via FluxCD and provides centralized log aggregation for all pods in the cluster.
+
+**Components:**
+- **Loki** - Log storage and querying engine (single binary mode for homelab)
+- **Promtail** - DaemonSet that collects logs from all pods
+- **Grafana** - Explore logs using the Loki data source
+
+**Access Logs in Grafana:**
+1. Open Grafana: `http://grafana.192.168.100.98.nip.io`
+2. Click **Explore** (compass icon in sidebar)
+3. Select **Loki** from the data source dropdown
+4. Query examples:
+   - `{namespace="monitoring"}` - All logs from monitoring namespace
+   - `{pod="loki-0"}` - Logs from specific pod
+   - `{container="nginx"}` - Logs from specific container
+   - `{namespace="kube-system"} |= "error"` - Filter for errors
+
+**What's Being Collected:**
+Promtail automatically collects logs from all Kubernetes pods with labels:
+- `namespace` - Pod namespace
+- `pod` - Pod name
+- `container` - Container name
+- All pod labels are also included
+
+**GitOps Management:**
+```bash
+# Edit Loki or Promtail configuration
+vi infrastructure/monitoring/loki-stack.yaml
+
+# Commit and apply
+git add infrastructure/monitoring/loki-stack.yaml
+git commit -m "Update Loki configuration"
+flux reconcile helmrelease -n monitoring loki
+```
+
+**Storage & Retention:**
+- Storage: NFS-backed persistent volume (10Gi)
+- Query lookback: 30 days
+- Deployment mode: SingleBinary (optimized for single-node homelab)
+
+**For detailed setup and troubleshooting**, see [Loki Setup Guide](docs/loki-setup-guide.md)
 
 ### TLS/HTTPS Setup with Cert-Manager (Optional)
 
@@ -409,8 +524,8 @@ This homelab uses **hostNetwork mode** for NGINX Ingress (optimized for WiFi):
 
 **Detailed Flow (HTTP/HTTPS Services)**:
 1. **External Access**: User accesses `http://grafana.192.168.100.98.nip.io`
-2. **DNS Resolution**: nip.io automatically resolves to `192.168.100.98` (the node IP)
-3. **Node Network**: Traffic arrives at port 80/443 on the K3s node
+2. **DNS Resolution**: nip.io automatically resolves to `192.168.100.98` (the node IP - spaceship)
+3. **Node Network**: Traffic arrives at port 80/443 on the K3s node (192.168.100.98)
 4. **NGINX Ingress**: Running in hostNetwork mode, directly listens on node's port 80/443
 5. **Routing**: NGINX routes traffic based on hostname to the appropriate backend service (ClusterIP)
 6. **Kubernetes Service**: Load balances across pod replicas
@@ -492,7 +607,8 @@ sudo ./scripts/kubeadm/setup-master-node.sh
 # - MetalLB
 # - NGINX Ingress
 # - Cert-Manager
-# - Prometheus Stack
+# - Prometheus Stack (Prometheus, Grafana, Alertmanager)
+# - Loki Stack (Loki, Promtail for log aggregation)
 # - All your applications
 
 # Watch deployment progress:
