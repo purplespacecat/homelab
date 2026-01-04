@@ -102,6 +102,9 @@ spec:
         limits:
           cpu: 200m
           memory: 128Mi
+      service:
+        port: 80
+        targetPort: 8080
 
     # Disable minio (using filesystem storage)
     minio:
