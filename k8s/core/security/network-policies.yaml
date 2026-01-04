@@ -138,6 +138,8 @@ spec:
     - protocol: TCP
       port: 3100  # Loki HTTP
     - protocol: TCP
+      port: 8080  # Loki gateway
+    - protocol: TCP
       port: 9095  # Loki GRPC
   egress:
   - {}  # Allow all egress for storage access
