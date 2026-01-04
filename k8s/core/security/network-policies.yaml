@@ -169,7 +169,11 @@ spec:
           app.kubernetes.io/name: loki
     ports:
     - protocol: TCP
-      port: 3100  # Send logs to Loki
+      port: 3100  # Direct Loki API
+    - protocol: TCP
+      port: 80    # Loki gateway service port
+    - protocol: TCP
+      port: 8080  # Loki gateway container port
   - to:
     - namespaceSelector: {}
     ports:
