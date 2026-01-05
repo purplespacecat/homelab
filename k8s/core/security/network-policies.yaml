@@ -83,6 +83,13 @@ spec:
     - protocol: TCP
       port: 8080  # Loki gateway container port
   - to:
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/name: tempo
+    ports:
+    - protocol: TCP
+      port: 3100  # Tempo HTTP API
+  - to:
     - namespaceSelector: {}
     ports:
     - protocol: TCP
@@ -198,3 +205,45 @@ spec:
       port: 53
     - protocol: TCP
       port: 443  # Kubernetes API server (for pod discovery)
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-tempo
+  namespace: monitoring
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: tempo
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  # Accept traces from monitoring namespace (Grafana queries)
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: monitoring
+    ports:
+    - protocol: TCP
+      port: 3100  # Tempo HTTP API
+  # Accept traces from otel-demo namespace
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: otel-demo
+    ports:
+    - protocol: TCP
+      port: 4317  # OTLP gRPC
+    - protocol: TCP
+      port: 4318  # OTLP HTTP
+  # Accept from ingress for UI access (optional)
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: ingress-nginx
+    ports:
+    - protocol: TCP
+      port: 3100
+  egress:
+  - {}  # Allow all egress for storage access

@@ -1,0 +1,75 @@
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: tempo
+  namespace: monitoring
+spec:
+  interval: 5m
+  chart:
+    spec:
+      chart: tempo
+      version: 1.7.2
+      sourceRef:
+        kind: HelmRepository
+        name: grafana
+        namespace: flux-system
+  values:
+    # Tempo configuration
+    tempo:
+      repository: grafana/tempo
+      tag: 2.3.1
+      # Retention period
+      retention: 168h  # 7 days
+
+      # Storage configuration
+      storage:
+        trace:
+          backend: local
+          local:
+            path: /var/tempo/traces
+
+      # Receivers - accept traces from OpenTelemetry
+      receivers:
+        otlp:
+          protocols:
+            grpc:
+              endpoint: 0.0.0.0:4317
+            http:
+              endpoint: 0.0.0.0:4318
+        jaeger:
+          protocols:
+            grpc:
+              endpoint: 0.0.0.0:14250
+            thrift_http:
+              endpoint: 0.0.0.0:14268
+        zipkin:
+          endpoint: 0.0.0.0:9411
+
+    # Persistence for traces
+    persistence:
+      enabled: true
+      storageClassName: nfs-client
+      size: 10Gi
+
+    # Service configuration
+    service:
+      type: ClusterIP
+      annotations: {}
+
+    # Resources
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+
+  install:
+    createNamespace: true
+    remediation:
+      retries: 3
+  upgrade:
+    remediation:
+      retries: 3

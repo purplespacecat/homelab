@@ -1,0 +1,114 @@
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: otel-demo
+  namespace: otel-demo
+spec:
+  interval: 5m
+  chart:
+    spec:
+      chart: opentelemetry-demo
+      version: 0.31.0
+      sourceRef:
+        kind: HelmRepository
+        name: opentelemetry
+        namespace: flux-system
+  values:
+    # OpenTelemetry Demo configuration
+
+    # Configure the demo to send data to our observability stack
+    opentelemetry-collector:
+      config:
+        exporters:
+          # Send traces to Tempo
+          otlp/tempo:
+            endpoint: tempo.monitoring.svc.cluster.local:4317
+            tls:
+              insecure: true
+
+          # Send metrics to Prometheus (via remote write or let Prometheus scrape)
+          prometheus:
+            endpoint: "0.0.0.0:9090"
+
+          # Keep logging for debugging
+          logging:
+            loglevel: info
+
+        service:
+          pipelines:
+            traces:
+              receivers: [otlp]
+              processors: [batch]
+              exporters: [otlp/tempo, logging]
+
+            metrics:
+              receivers: [otlp]
+              processors: [batch]
+              exporters: [prometheus, logging]
+
+    # Components to enable
+    components:
+      # Frontend - web UI to generate traffic
+      frontend:
+        enabled: true
+        service:
+          type: ClusterIP
+
+      # Backend services
+      accountingService:
+        enabled: true
+      adService:
+        enabled: true
+      cartService:
+        enabled: true
+      checkoutService:
+        enabled: true
+      currencyService:
+        enabled: true
+      emailService:
+        enabled: true
+      paymentService:
+        enabled: true
+      productCatalogService:
+        enabled: true
+      recommendationService:
+        enabled: true
+      shippingService:
+        enabled: true
+
+      # Load generator - creates realistic traffic
+      loadgenerator:
+        enabled: true
+        env:
+          - name: LOCUST_USERS
+            value: "10"
+          - name: LOCUST_SPAWN_RATE
+            value: "1"
+          - name: LOCUST_RUN_TIME
+            value: "24h"
+
+      # Kafka for async messaging
+      kafka:
+        enabled: true
+
+    # Service monitor for Prometheus to scrape metrics
+    serviceMonitor:
+      enabled: true
+
+    # Default resources (keep them small for homelab)
+    default:
+      resources:
+        limits:
+          memory: 200Mi
+        requests:
+          cpu: 50m
+          memory: 100Mi
+
+  install:
+    createNamespace: true
+    remediation:
+      retries: 3
+  upgrade:
+    remediation:
+      retries: 3
