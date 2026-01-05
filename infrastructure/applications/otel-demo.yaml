@@ -92,19 +92,6 @@ spec:
       kafka:
         enabled: true
 
-    # Service monitor for Prometheus to scrape metrics
-    serviceMonitor:
-      enabled: true
-
-    # Default resources (keep them small for homelab)
-    default:
-      resources:
-        limits:
-          memory: 200Mi
-        requests:
-          cpu: 50m
-          memory: 100Mi
-
   install:
     createNamespace: true
     remediation:
