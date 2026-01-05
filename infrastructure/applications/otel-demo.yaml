@@ -16,36 +16,7 @@ spec:
         namespace: flux-system
   values:
     # OpenTelemetry Demo configuration
-
-    # Configure the demo to send data to our observability stack
-    opentelemetry-collector:
-      config:
-        exporters:
-          # Send traces to Tempo
-          otlp/tempo:
-            endpoint: tempo.monitoring.svc.cluster.local:4317
-            tls:
-              insecure: true
-
-          # Send metrics to Prometheus (via remote write or let Prometheus scrape)
-          prometheus:
-            endpoint: "0.0.0.0:9090"
-
-          # Keep logging for debugging
-          logging:
-            loglevel: info
-
-        service:
-          pipelines:
-            traces:
-              receivers: [otlp]
-              processors: [batch]
-              exporters: [otlp/tempo, logging]
-
-            metrics:
-              receivers: [otlp]
-              processors: [batch]
-              exporters: [prometheus, logging]
+    # Using demo's default collector config for now
 
     # Components to enable
     components:
