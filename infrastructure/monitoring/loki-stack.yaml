@@ -196,18 +196,19 @@ spec:
         cpu: 200m
         memory: 128Mi
 
-    # Container security context - increase file descriptor limits
-    containerSecurityContext:
-      capabilities:
-        add:
-          - SYS_RESOURCE
-      # Allow higher file descriptor limits for inotify watchers
-      allowPrivilegeEscalation: true
-
-    # Init container to set higher file descriptor limits
+    # Init container to increase inotify limits for watching pod logs
     initContainer:
-      enabled: true
-      fsInotifyMaxUserInstances: 512
+      - name: init-inotify
+        image: docker.io/busybox:1.33
+        imagePullPolicy: IfNotPresent
+        command:
+          - sh
+          - -c
+          - |
+            sysctl -w fs.inotify.max_user_instances=512
+            sysctl -w fs.inotify.max_user_watches=524288
+        securityContext:
+          privileged: true
 
     # Enable service monitor
     serviceMonitor:
