@@ -203,8 +203,12 @@ spec:
       port: 53  # DNS
     - protocol: UDP
       port: 53
+  # Allow egress to Kubernetes API server (any destination on port 443/6443)
+  - ports:
     - protocol: TCP
-      port: 443  # Kubernetes API server (for pod discovery)
+      port: 443  # Kubernetes API (ClusterIP)
+    - protocol: TCP
+      port: 6443  # Kubernetes API (node port/external)
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
