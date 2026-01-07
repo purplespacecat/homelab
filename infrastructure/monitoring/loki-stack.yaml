@@ -196,6 +196,19 @@ spec:
         cpu: 200m
         memory: 128Mi
 
+    # Container security context - increase file descriptor limits
+    containerSecurityContext:
+      capabilities:
+        add:
+          - SYS_RESOURCE
+      # Allow higher file descriptor limits for inotify watchers
+      allowPrivilegeEscalation: true
+
+    # Init container to set higher file descriptor limits
+    initContainer:
+      enabled: true
+      fsInotifyMaxUserInstances: 512
+
     # Enable service monitor
     serviceMonitor:
       enabled: true
