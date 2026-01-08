@@ -44,6 +44,16 @@ spec:
                 - debug
                 - spanmetrics
 
+    # Disable resource-intensive observability components
+    grafana:
+      enabled: false
+    prometheus:
+      enabled: false
+    opensearch:
+      enabled: false
+    jaeger:
+      enabled: true
+
     # Components to enable
     components:
       # Frontend - web UI to generate traffic
@@ -51,18 +61,6 @@ spec:
         enabled: true
         service:
           type: ClusterIP
-
-      # Disable Grafana - using main Grafana in monitoring namespace
-      grafana:
-        enabled: false
-
-      # Disable Prometheus - using main Prometheus in monitoring namespace
-      prometheus:
-        enabled: false
-
-      # Disable OpenSearch - reduces memory usage significantly
-      opensearch:
-        enabled: false
 
       # Backend services
       accountingService:
@@ -93,10 +91,6 @@ spec:
       # Kafka - disabled to reduce memory usage
       kafka:
         enabled: false
-
-      # Jaeger - keep enabled but with minimal resources
-      jaeger:
-        enabled: true
 
   install:
     createNamespace: true
