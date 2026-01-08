@@ -16,7 +16,26 @@ spec:
         namespace: flux-system
   values:
     # OpenTelemetry Demo configuration
-    # Using demo's default collector config for now
+    # Configure the collector to send traces to both Jaeger and Tempo
+    opentelemetry-collector:
+      config:
+        exporters:
+          otlp/jaeger:
+            endpoint: 'otel-demo-jaeger-collector:4317'
+            tls:
+              insecure: true
+          otlp/tempo:
+            endpoint: 'tempo.monitoring.svc.cluster.local:4317'
+            tls:
+              insecure: true
+        service:
+          pipelines:
+            traces:
+              exporters:
+                - otlp/jaeger
+                - otlp/tempo
+                - debug
+                - spanmetrics
 
     # Components to enable
     components:
