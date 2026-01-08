@@ -17,8 +17,13 @@ spec:
   values:
     # OpenTelemetry Demo configuration
     # Configure the collector to send traces to both Jaeger and Tempo
+    # with probabilistic sampling to reduce resource usage
     opentelemetry-collector:
       config:
+        processors:
+          # Sample only 5% of traces to reduce load
+          probabilistic_sampler:
+            sampling_percentage: 5
         exporters:
           otlp/jaeger:
             endpoint: 'otel-demo-jaeger-collector:4317'
@@ -31,6 +36,8 @@ spec:
         service:
           pipelines:
             traces:
+              processors:
+                - probabilistic_sampler
               exporters:
                 - otlp/jaeger
                 - otlp/tempo
@@ -47,6 +54,14 @@ spec:
 
       # Disable Grafana - using main Grafana in monitoring namespace
       grafana:
+        enabled: false
+
+      # Disable Prometheus - using main Prometheus in monitoring namespace
+      prometheus:
+        enabled: false
+
+      # Disable OpenSearch - reduces memory usage significantly
+      opensearch:
         enabled: false
 
       # Backend services
@@ -71,19 +86,16 @@ spec:
       shippingService:
         enabled: true
 
-      # Load generator - creates realistic traffic
+      # Load generator - disabled to reduce cluster resource usage
       loadgenerator:
-        enabled: true
-        env:
-          - name: LOCUST_USERS
-            value: "10"
-          - name: LOCUST_SPAWN_RATE
-            value: "1"
-          - name: LOCUST_RUN_TIME
-            value: "24h"
+        enabled: false
 
-      # Kafka for async messaging
+      # Kafka - disabled to reduce memory usage
       kafka:
+        enabled: false
+
+      # Jaeger - keep enabled but with minimal resources
+      jaeger:
         enabled: true
 
   install:
