@@ -45,6 +45,10 @@ spec:
         service:
           type: ClusterIP
 
+      # Disable Grafana - using main Grafana in monitoring namespace
+      grafana:
+        enabled: false
+
       # Backend services
       accountingService:
         enabled: true
