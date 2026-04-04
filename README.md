@@ -50,8 +50,6 @@ This repo contains files and scripts for a Kubernetes homelab with support for b
 |k8s/core/storage|Storage configuration (NFS, StorageClasses)|
 |k8s/core/security|Security-related configurations (NetworkPolicies)|
 |k8s/cert-manager|TLS certificate management configuration|
-|k8s/helm|Helm chart values (referenced by FluxCD)|
-|k8s/applications|Your applications (managed by FluxCD)|
 |docs|Documentation (GitOps guides, networking, management)|
 |scripts/k3s|K3s cluster setup scripts (lightweight Kubernetes)|
 |scripts/kubeadm|Kubeadm cluster setup scripts (full Kubernetes)|
@@ -65,7 +63,7 @@ This repo contains files and scripts for a Kubernetes homelab with support for b
 - **Node**: spaceship (control-plane, single-node cluster)
 - **Node IP**: 192.168.100.98
 - **OS**: Ubuntu 22.04.5 LTS
-- **Kernel**: 6.8.0-90-generic
+- **Kernel**: 6.8.0-106-generic
 - **Container Runtime**: containerd 2.1.5
 
 **Management:**
@@ -82,7 +80,7 @@ All components are managed by FluxCD and automatically deployed from this reposi
 - **Cert-Manager** (cert-manager) - TLS certificate management
 - **NGINX Ingress** (ingress-nginx) - HTTP/HTTPS routing (hostNetwork mode)
 
-**Monitoring & Logging:**
+**Monitoring, Logging & Tracing:**
 - **Prometheus Stack** (monitoring) - Metrics collection and alerting
   - Prometheus - Metrics database
   - Grafana - Dashboards and visualization
@@ -93,9 +91,10 @@ All components are managed by FluxCD and automatically deployed from this reposi
   - Loki - Log storage and querying
   - Promtail - Log collection from all pods
   - See [Loki Setup Guide](docs/loki-setup-guide.md) for details
+- **Tempo** (monitoring) - Distributed tracing backend
 
 **Access URLs:**
-- Grafana: `http://grafana.192.168.100.98.nip.io` (default: admin/admin)
+- Grafana: `http://grafana.192.168.100.98.nip.io` (credentials in `grafana-admin-credentials` Secret)
 - Prometheus: `http://prometheus.192.168.100.98.nip.io`
 - Alertmanager: `http://alertmanager.192.168.100.98.nip.io`
 
@@ -243,7 +242,7 @@ The monitoring stack (Prometheus, Grafana, Alertmanager) is automatically deploy
 
 **Current Stack (deployed):**
 - Prometheus: `http://prometheus.192.168.100.98.nip.io`
-- Grafana: `http://grafana.192.168.100.98.nip.io` (default: admin/admin)
+- Grafana: `http://grafana.192.168.100.98.nip.io` (credentials in `grafana-admin-credentials` Secret)
 - Alertmanager: `http://alertmanager.192.168.100.98.nip.io`
 
 **GitOps Management:**
@@ -382,8 +381,8 @@ To avoid certificate warnings when using the homelab CA:
 After installing cert-manager, update the Prometheus values to enable TLS:
 
 ```bash
-# Edit the values file
-vi k8s/helm/prometheus/values.yaml
+# Edit the HelmRelease values
+vi infrastructure/monitoring/prometheus-stack.yaml
 ```
 
 For each ingress section (prometheus, grafana, alertmanager), add the cert-manager annotation and TLS configuration:
@@ -409,9 +408,11 @@ prometheus:
 
 Apply the changes:
 ```bash
-helm upgrade prometheus prometheus-community/kube-prometheus-stack \
-  -n monitoring \
-  -f k8s/helm/prometheus/values.yaml
+git add infrastructure/monitoring/prometheus-stack.yaml
+git commit -m "Enable TLS on monitoring ingresses"
+git push
+# Flux applies automatically, or force:
+flux reconcile helmrelease -n monitoring prometheus-stack
 ```
 
 **Manual Installation**:
@@ -541,46 +542,36 @@ This homelab uses **hostNetwork mode** for NGINX Ingress (optimized for WiFi):
 - MetalLB IP pool: `192.168.100.200-192.168.100.250`
 
 **Key Configuration Points**:
-- NGINX Ingress: `k8s/helm/ingress-nginx/values.yaml` (hostNetwork: true)
+- NGINX Ingress: `infrastructure/networking/ingress-nginx.yaml` (hostNetwork: true)
 - MetalLB IP pool: `k8s/core/networking/metallb-config.yaml` (for non-HTTP services)
-- Ingress rules: Defined in Helm values (e.g., `k8s/helm/prometheus/values.yaml`)
+- Ingress rules: Defined inline in HelmRelease values (e.g., `infrastructure/monitoring/prometheus-stack.yaml`)
 - Service endpoints: Automatically managed by Kubernetes
 
 **Full networking documentation**: See [docs/NETWORKING.md](docs/NETWORKING.md) for detailed explanations
 
-### Helm Workflow
+### Helm Workflow (via FluxCD)
 
-The homelab uses Helm for managing applications. Here's how it works:
-
-**Installation Flow** (`./scripts/common/install-helm-charts.sh`):
-1. Install/verify Helm is present
-2. Create namespaces (`monitoring`, `ingress-nginx`)
-3. Install MetalLB (raw manifests, not Helm)
-4. Add Helm repositories (ingress-nginx, prometheus-community)
-5. Install NGINX Ingress Controller (Helm chart)
-6. Auto-update Prometheus values.yaml with detected external IP
-7. Install Prometheus Stack (Helm chart)
-
-**Helm Releases** (managed via Helm):
-- `ingress-nginx` (namespace: `ingress-nginx`)
-- `prometheus` (namespace: `monitoring`)
-- `cert-manager` (namespace: `cert-manager`) - if installed
+All Helm releases are managed by FluxCD HelmRelease CRDs. Values are defined inline in the HelmRelease spec.
 
 **Updating a Helm Release**:
 ```bash
-# Edit values file
-vi k8s/helm/prometheus/values.yaml
+# Edit the HelmRelease
+vi infrastructure/monitoring/prometheus-stack.yaml
 
-# Apply changes
-helm upgrade prometheus prometheus-community/kube-prometheus-stack \
-  -n monitoring \
-  -f k8s/helm/prometheus/values.yaml
+# Commit and push -- Flux applies within 1 minute
+git add infrastructure/monitoring/prometheus-stack.yaml
+git commit -m "Update Prometheus configuration"
+git push
+
+# Or force immediate reconciliation:
+flux reconcile helmrelease -n monitoring prometheus-stack
 ```
 
 **Checking Helm Releases**:
 ```bash
-helm list -A  # List all releases across all namespaces
-helm status prometheus -n monitoring  # Check specific release
+flux get helmreleases -A              # FluxCD status
+helm list -A                          # Helm release versions
+kubectl get helmrelease -A            # CRD status
 ```
 
 ### Disaster Recovery & Cluster Rebuild
@@ -662,7 +653,6 @@ sudo ./scripts/kubeadm/join-worker-node.sh
 - `clusters/homelab/` - FluxCD cluster configuration
 - `infrastructure/` - All Helm releases and sources
 - `k8s/core/networking/metallb-config.yaml` - Your IP pool configuration
-- `k8s/helm/*/values.yaml` - Customized Helm values
 - `k8s/cert-manager/cert-manager-issuers.yaml` - Certificate issuer email
 
 **Recovery Time**:
@@ -678,11 +668,11 @@ Before deploying, ensure these are configured for your environment:
 - [ ] **NFS Server IP**: Used in storage and provisioner scripts (currently: `192.168.100.98`)
 - [ ] **Firewall Network Range**: Update `192.168.100.0/24` in firewall scripts if different
 - [ ] **Let's Encrypt Email**: Update in `k8s/cert-manager/cert-manager-issuers.yaml`
-- [ ] **Prometheus Hosts**: Update nip.io IPs in `k8s/helm/prometheus/values.yaml`
+- [ ] **Prometheus Hosts**: Update nip.io IPs in `infrastructure/monitoring/prometheus-stack.yaml`
 
 ## Important Notes
 
-- **Default Credentials**: Grafana default is `admin/admin` - change in production
+- **Default Credentials**: Grafana uses `grafana-admin-credentials` Secret - create it before deploying
 - **NFS Permissions**: Using `777` is for lab environments only; secure for production with `./scripts/secure-nfs.sh`
 - **Firewall**: Ensure ports 80/443 are open on master node for external access
 - **nip.io**: Free DNS service; consider proper DNS for production

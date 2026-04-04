@@ -9,7 +9,7 @@ This directory contains FluxCD resources for managing the homelab infrastructure
 - `storage/` - Storage provisioners (NFS)
 - `networking/` - Network components (MetalLB, NGINX Ingress)
 - `security/` - Security components (cert-manager)
-- `monitoring/` - Monitoring stack (Prometheus, Grafana, Alertmanager)
+- `monitoring/` - Monitoring stack (Prometheus, Grafana, Alertmanager, Loki, Tempo)
 
 ## Deployment Order
 
@@ -20,7 +20,7 @@ Flux automatically handles dependencies, but the logical order is:
 3. Storage (NFS provisioner)
 4. Networking (MetalLB, NGINX Ingress)
 5. Security (cert-manager + issuers)
-6. Monitoring (Prometheus stack)
+6. Monitoring (Prometheus stack, Loki, Promtail, Tempo)
 
 ## Modifying Resources
 
