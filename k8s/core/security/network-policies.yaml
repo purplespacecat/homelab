@@ -17,7 +17,7 @@ metadata:
 spec:
   podSelector:
     matchLabels:
-      app: prometheus
+      app.kubernetes.io/name: prometheus
   policyTypes:
   - Ingress
   - Egress
@@ -67,7 +67,7 @@ spec:
   - to:
     - podSelector:
         matchLabels:
-          app: prometheus
+          app.kubernetes.io/name: prometheus
     ports:
     - protocol: TCP
       port: 9090
@@ -77,27 +77,27 @@ spec:
           app.kubernetes.io/name: loki
     ports:
     - protocol: TCP
-      port: 3100  # Query Loki logs
+      port: 3100  # Direct Loki API
+    - protocol: TCP
+      port: 80    # Loki gateway service port
+    - protocol: TCP
+      port: 8080  # Loki gateway container port
   - to:
     - podSelector:
         matchLabels:
           app.kubernetes.io/name: tempo
     ports:
     - protocol: TCP
-      port: 3100  # Query Tempo traces
-  # Allow Grafana sidecars to reach Kubernetes API and DNS
+      port: 3100  # Tempo HTTP API
   - to:
-    - ipBlock:
-        cidr: 0.0.0.0/0
+    - namespaceSelector: {}
     ports:
     - protocol: TCP
-      port: 443
-    - protocol: TCP
-      port: 6443
+      port: 53  # DNS
     - protocol: UDP
       port: 53
     - protocol: TCP
-      port: 53
+      port: 443  # Kubernetes API server (for sidecar)
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -158,6 +158,8 @@ spec:
     - protocol: TCP
       port: 3100  # Loki HTTP
     - protocol: TCP
+      port: 8080  # Loki gateway
+    - protocol: TCP
       port: 9095  # Loki GRPC
   egress:
   - {}  # Allow all egress for storage access
@@ -189,7 +191,11 @@ spec:
           app.kubernetes.io/name: loki
     ports:
     - protocol: TCP
-      port: 3100  # Send logs to Loki
+      port: 3100  # Direct Loki API
+    - protocol: TCP
+      port: 80    # Loki gateway service port
+    - protocol: TCP
+      port: 8080  # Loki gateway container port
   - to:
     - namespaceSelector: {}
     ports:
@@ -197,3 +203,51 @@ spec:
       port: 53  # DNS
     - protocol: UDP
       port: 53
+  # Allow egress to Kubernetes API server (any destination on port 443/6443)
+  - ports:
+    - protocol: TCP
+      port: 443  # Kubernetes API (ClusterIP)
+    - protocol: TCP
+      port: 6443  # Kubernetes API (node port/external)
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-tempo
+  namespace: monitoring
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: tempo
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  # Accept traces from monitoring namespace (Grafana queries)
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: monitoring
+    ports:
+    - protocol: TCP
+      port: 3100  # Tempo HTTP API
+  # Accept traces from otel-demo namespace
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: otel-demo
+    ports:
+    - protocol: TCP
+      port: 4317  # OTLP gRPC
+    - protocol: TCP
+      port: 4318  # OTLP HTTP
+  # Accept from ingress for UI access (optional)
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: ingress-nginx
+    ports:
+    - protocol: TCP
+      port: 3100
+  egress:
+  - {}  # Allow all egress for storage access

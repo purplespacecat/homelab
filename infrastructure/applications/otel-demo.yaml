@@ -1,0 +1,101 @@
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: otel-demo
+  namespace: otel-demo
+spec:
+  interval: 5m
+  chart:
+    spec:
+      chart: opentelemetry-demo
+      version: 0.31.0
+      sourceRef:
+        kind: HelmRepository
+        name: opentelemetry
+        namespace: flux-system
+  values:
+    # OpenTelemetry Demo configuration
+    # Configure the collector to send traces to both Jaeger and Tempo
+    # with probabilistic sampling to reduce resource usage
+    opentelemetry-collector:
+      config:
+        processors:
+          # Sample only 5% of traces to reduce load
+          probabilistic_sampler:
+            sampling_percentage: 5
+        exporters:
+          otlp/jaeger:
+            endpoint: 'otel-demo-jaeger-collector:4317'
+            tls:
+              insecure: true
+          otlp/tempo:
+            endpoint: 'tempo.monitoring.svc.cluster.local:4317'
+            tls:
+              insecure: true
+        service:
+          pipelines:
+            traces:
+              processors:
+                - probabilistic_sampler
+              exporters:
+                - otlp/jaeger
+                - otlp/tempo
+                - debug
+                - spanmetrics
+
+    # Disable resource-intensive observability components
+    grafana:
+      enabled: false
+    prometheus:
+      enabled: false
+    opensearch:
+      enabled: false
+    jaeger:
+      enabled: true
+
+    # Components to enable
+    components:
+      # Frontend - web UI to generate traffic
+      frontend:
+        enabled: true
+        service:
+          type: ClusterIP
+
+      # Backend services
+      accountingService:
+        enabled: true
+      adService:
+        enabled: true
+      cartService:
+        enabled: true
+      checkoutService:
+        enabled: true
+      currencyService:
+        enabled: true
+      emailService:
+        enabled: true
+      paymentService:
+        enabled: true
+      productCatalogService:
+        enabled: true
+      recommendationService:
+        enabled: true
+      shippingService:
+        enabled: true
+
+      # Load generator - disabled to reduce cluster resource usage
+      loadgenerator:
+        enabled: false
+
+      # Kafka - disabled to reduce memory usage
+      kafka:
+        enabled: false
+
+  install:
+    createNamespace: true
+    remediation:
+      retries: 3
+  upgrade:
+    remediation:
+      retries: 3
