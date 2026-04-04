@@ -13,3 +13,7 @@ spec:
   path: ./k8s/core/storage
   prune: true
   wait: true
+  postBuild:
+    substituteFrom:
+      - kind: ConfigMap
+        name: cluster-config

@@ -16,3 +16,7 @@ spec:
   path: ./infrastructure/monitoring
   prune: true
   wait: true
+  postBuild:
+    substituteFrom:
+      - kind: ConfigMap
+        name: cluster-config

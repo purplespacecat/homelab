@@ -15,10 +15,11 @@ This homelab uses **NGINX Ingress in hostNetwork mode** due to WiFi compatibilit
 
 ### Installation Method
 
-All infrastructure components are installed via **Helm CLI** (not Kustomize or HelmChart CRDs):
-- Installation scripts in `../scripts/common/` handle all deployments
+All infrastructure components are managed by **FluxCD GitOps**:
+- HelmRelease definitions live in `../infrastructure/` (source of truth for deployed values)
 - Storage class: `nfs-client` (provided by NFS provisioner, set as default)
 - K3s includes `local-path` storage class, but NFS is preferred for persistent data
+- Legacy manual scripts in `../scripts/common/` are kept for disaster recovery only
 
 ## Directory Structure
 
@@ -31,19 +32,15 @@ k8s/
 │   ├── networking/                 # Network configuration
 │   │   └── metallb-config.yaml
 │   ├── storage/                    # Storage configuration
-│   │   ├── monitoring-storage.yaml  # Static PVs (optional/legacy)
 │   │   └── nfs-config.yaml          # NFS server configuration
 │   └── security/                   # Security-related configurations
 │       └── network-policies.yaml
-├── cert-manager/                   # TLS certificate management
-│   ├── cert-manager-issuers.yaml   # Let's Encrypt issuer
-│   └── local-ca.yaml               # Local CA for homelab
-└── helm/                           # Helm chart values
-    ├── ingress-nginx/
-    │   └── values.yaml
-    └── prometheus/
-        └── values.yaml             # Includes Grafana configuration
+└── cert-manager/                   # TLS certificate management
+    ├── cert-manager-issuers.yaml   # Let's Encrypt issuer
+    └── local-ca.yaml               # Local CA for homelab
 ```
+
+> **Note**: Helm chart values are defined inline in the HelmRelease specs under `../infrastructure/`. See `infrastructure/monitoring/prometheus-stack.yaml`, `infrastructure/networking/ingress-nginx.yaml`, etc.
 
 ## Core Resources
 
@@ -68,27 +65,13 @@ Configures MetalLB for load balancing in a bare-metal Kubernetes environment:
 
 ### Storage Configuration
 
-#### `storage/monitoring-storage.yaml`
-**Optional/Legacy** - Contains static PersistentVolumes for monitoring components:
-
-- **PersistentVolumes** (all use `nfs-client` StorageClass):
-  - **prometheus-server-pv**: 10Gi storage at `/data/prometheus` on NFS server
-  - **grafana-pv**: 10Gi storage at `/data/grafana` on NFS server
-  - **alertmanager-pv-0** and **alertmanager-pv-1**: 10Gi storage each at respective paths
-  - All have specific labels that can be used by PVC selectors
-
-**Note**: With the NFS provisioner installed, these static PVs are optional. The `nfs-client` StorageClass will dynamically provision volumes as needed.
-
 #### `storage/nfs-config.yaml`
 Contains NFS server configuration:
 - **ConfigMap**: Stores NFS server address (192.168.100.98) and mount options
 - Used by various components that need to access NFS storage
 
-#### NFS Subdir External Provisioner (Installed via Helm)
-**Installed by**: `scripts/install-nfs-provisioner.sh`
-
-The NFS provisioner is now installed via Helm CLI instead of K3s HelmChart CRD:
-- Creates a dedicated namespace `nfs-provisioner`
+#### NFS Subdir External Provisioner (Managed by FluxCD)
+Defined in `../infrastructure/storage/nfs-provisioner.yaml`:
 - Creates the `nfs-client` StorageClass (set as default)
 - Automatically provisions PersistentVolumes on the NFS server
 - Configuration: NFS server at 192.168.100.98, path `/data`
@@ -123,44 +106,30 @@ Sets up a local Certificate Authority for the homelab:
 - **homelab-ca**: Root CA certificate with ECDSA private key
 - **homelab-ca-issuer**: Issues certificates signed by the local CA
 
-## Helm Chart Values
+## FluxCD-Managed Components
 
-### `helm/prometheus/values.yaml`
-Configures the Prometheus monitoring stack (includes Prometheus, Grafana, and Alertmanager):
+All Helm chart values are now defined inline in HelmRelease specs under `../infrastructure/`. Key files:
 
-1. **Prometheus Server**:
-   - **Storage**: Uses 10Gi PV with `nfs-client` StorageClass
-   - **Retention**: 30 days data retention
-   - **Resources**: Requests 500m CPU, 512Mi memory; limits to 1000m CPU, 1Gi memory
-   - **Ingress**: Exposes at `prometheus.local` and `prometheus.<NODE-IP>.nip.io`
-   - **TLS**: Can be configured with `homelab-ca-issuer` (optional)
+- **Prometheus Stack**: `../infrastructure/monitoring/prometheus-stack.yaml`
+  - Prometheus, Grafana, Alertmanager, Node Exporter, Kube State Metrics
+  - Storage: 10Gi NFS per component, 2-day retention
+  - Grafana credentials via `grafana-admin-credentials` Secret
 
-2. **Grafana** (bundled with Prometheus stack):
-   - **Storage**: 10Gi persistent storage with `nfs-client` StorageClass
-   - **Ingress**: Configured at `grafana.local` and `grafana.<NODE-IP>.nip.io`
-   - **Security**: Uses a Kubernetes secret for admin credentials
-   - **TLS**: Can be configured with `homelab-ca-issuer` (optional)
+- **Loki + Promtail**: `../infrastructure/monitoring/loki-stack.yaml`
+  - Centralized log aggregation, SingleBinary mode
+  - 10Gi NFS storage, 30-day query lookback
 
-3. **AlertManager**:
-   - **Storage**: 10Gi with `nfs-client` StorageClass for each replica
-   - **Ingress**: Available at `alertmanager.local` and `alertmanager.<NODE-IP>.nip.io`
-   - **TLS**: Can be configured with `homelab-ca-issuer` (optional)
+- **Tempo**: `../infrastructure/monitoring/tempo.yaml`
+  - Distributed tracing backend, 10Gi NFS storage
 
-4. **Exporters**:
-   - **Node Exporter**: Enabled to collect host metrics
-   - **Kube State Metrics**: Enabled to collect Kubernetes object metrics
+- **NGINX Ingress**: `../infrastructure/networking/ingress-nginx.yaml`
+  - hostNetwork mode, ClusterIP service type, DaemonSet
+  - Proxy timeouts: 300s, max body size: 100m
 
-### `helm/ingress-nginx/values.yaml`
-NGINX Ingress Controller configuration:
-- **hostNetwork**: Enabled (true) - Binds directly to node's network interface
-- **Service Type**: ClusterIP (not LoadBalancer, due to WiFi compatibility)
-- **DNS Policy**: ClusterFirstWithHostNet
-- **Why hostNetwork?**: MetalLB L2 mode doesn't work reliably over WiFi interfaces
-- **Metrics**: Enabled with Prometheus annotations for auto-discovery
-- **Configuration**:
-  - Max body size: 100m
-  - Timeouts: 300 seconds for read/send operations
-- **Resources**: Requests 100m CPU, 128Mi memory; limits to 500m CPU, 512Mi memory
+- **MetalLB**: `../infrastructure/networking/metallb.yaml`
+  - L2 mode, IP pool: 192.168.100.200-250
+
+- **Cert-Manager**: `../infrastructure/security/cert-manager.yaml`
 
 ## Best Practices Used
 
@@ -182,69 +151,6 @@ NGINX Ingress Controller configuration:
 
 ## Installation
 
-### Quick Start (Recommended)
+All components are deployed automatically by FluxCD. See [Managing with Flux](../docs/managing-with-flux.md) for the full workflow.
 
-Use the master installation script to install all components in the correct order:
-
-```bash
-../scripts/install-all-helm-charts.sh
-```
-
-This script will install:
-1. NFS Subdir External Provisioner (storage)
-2. MetalLB (load balancing)
-3. Cert-Manager (TLS certificates)
-4. NGINX Ingress Controller
-5. Prometheus Stack (Prometheus, Grafana, Alertmanager)
-
-### Manual Installation Order
-
-If installing components manually, follow this order:
-
-1. **Storage**: Install NFS provisioner
-   ```bash
-   ../scripts/install-nfs-provisioner.sh
-   ```
-
-2. **Namespaces**: Create core namespaces
-   ```bash
-   kubectl apply -f core/namespaces/
-   ```
-
-3. **MetalLB**: Install load balancer
-   ```bash
-   kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.13.12/config/manifests/metallb-native.yaml
-   sleep 10
-   kubectl apply -f core/networking/metallb-config.yaml
-   ```
-
-4. **Cert-Manager**: Install certificate management
-   ```bash
-   ../scripts/install-cert-manager.sh
-   ```
-
-5. **Ingress Controller**: Install NGINX
-   ```bash
-   helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
-   helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx \
-     --namespace ingress-nginx \
-     -f helm/ingress-nginx/values.yaml
-   ```
-
-6. **Monitoring Stack**: Install Prometheus, Grafana, Alertmanager
-   ```bash
-   kubectl apply -f core/storage/monitoring-storage.yaml  # Optional static PVs
-   helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
-   helm upgrade --install prometheus prometheus-community/kube-prometheus-stack \
-     --namespace monitoring \
-     -f helm/prometheus/values.yaml
-   ```
-
-
-## Uninstallation
-
-To remove all components:
-
-```bash
-../scripts/uninstall-all-helm-charts.sh
-```
+For disaster recovery or fresh cluster setup, see the [Quick Start](../README.md#quick-start) in the main README.
