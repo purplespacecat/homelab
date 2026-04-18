@@ -97,6 +97,7 @@ spec:
       additionalDataSources:
         - name: Prometheus
           type: prometheus
+          uid: prometheus
           url: http://prometheus-stack-kube-prom-prometheus:9090
           access: proxy
           isDefault: true
@@ -104,6 +105,7 @@ spec:
             timeInterval: 30s
         - name: Loki
           type: loki
+          uid: loki
           url: http://loki-gateway:80
           access: proxy
           isDefault: false
@@ -111,6 +113,7 @@ spec:
             maxLines: 1000
         - name: Tempo
           type: tempo
+          uid: tempo
           url: http://tempo:3100
           access: proxy
           isDefault: false
@@ -118,31 +121,25 @@ spec:
             tracesToLogsV2:
               datasourceUid: loki
               filterByTraceID: true
-            nodeGraph:
-              enabled: true
-            serviceMap:
-              datasourceUid: prometheus
-            # Link traces to logs
             tracesToLogs:
-              datasourceUid: Loki
+              datasourceUid: loki
               filterByTraceID: true
               filterBySpanID: false
               mapTagNamesEnabled: false
               tags: ['job', 'instance', 'pod', 'namespace']
-            # Link traces to metrics
             tracesToMetrics:
-              datasourceUid: Prometheus
+              datasourceUid: prometheus
               queries:
                 - name: 'Sample query'
                   query: 'rate(traces_spanmetrics_latency_bucket{$$__tags}[5m])'
-            serviceMap:
-              datasourceUid: Prometheus
             nodeGraph:
               enabled: true
+            serviceMap:
+              datasourceUid: prometheus
             search:
               hide: false
             lokiSearch:
-              datasourceUid: Loki
+              datasourceUid: loki
 
     # Alertmanager configuration
     alertmanager:
