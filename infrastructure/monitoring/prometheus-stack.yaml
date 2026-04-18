@@ -93,16 +93,8 @@ spec:
             gnetId: 13639
             revision: 2
             datasource: Loki
-      # Datasources
+      # Datasources (Prometheus + Alertmanager are provided by the chart's sidecar)
       additionalDataSources:
-        - name: Prometheus
-          type: prometheus
-          uid: prometheus
-          url: http://prometheus-stack-kube-prom-prometheus:9090
-          access: proxy
-          isDefault: true
-          jsonData:
-            timeInterval: 30s
         - name: Loki
           type: loki
           uid: loki
