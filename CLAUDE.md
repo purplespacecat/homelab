@@ -140,4 +140,5 @@ Single-node homelab -- be conservative with resources. Current allocations:
 - **Chart upgrades with big version jumps** can break CRDs and require manual intervention. Bump incrementally.
 - **Loki/Tempo charts** add pod anti-affinity by default -- must be disabled for single-node
 - **Grafana sidecars** in kube-prometheus-stack need K8s API egress (NetworkPolicy must allow it)
+- **Grafana datasource provisioning** -- `additionalDataSources` must not include Prometheus or Alertmanager (the chart's sidecar already provisions these). Adding them again causes Grafana 12 to crash with "data source not found". Loki and Tempo must have explicit `uid:` fields so cross-datasource references (tracesToLogsV2, serviceMap) resolve correctly.
 - **NFS PV ownership** -- new chart versions may run as different UIDs. Delete PVC and let it recreate if permissions break.

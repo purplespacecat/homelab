@@ -283,6 +283,7 @@ grafana:
   additionalDataSources:
     - name: Loki
       type: loki
+      uid: loki
       url: http://loki-gateway:80
       access: proxy
       isDefault: false
