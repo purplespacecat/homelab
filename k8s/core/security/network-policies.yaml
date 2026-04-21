@@ -96,8 +96,12 @@ spec:
       port: 53  # DNS
     - protocol: UDP
       port: 53
+  - to:
+    - ipBlock:
+        cidr: 10.43.0.1/32
+    ports:
     - protocol: TCP
-      port: 443  # Kubernetes API server (for sidecar)
+      port: 443  # Kubernetes API server (for sidecars)
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
