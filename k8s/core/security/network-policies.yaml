@@ -46,6 +46,48 @@ spec:
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
+  name: allow-kube-state-metrics
+  namespace: monitoring
+spec:
+  # Forgotten when the other allow-* policies were written: default-deny
+  # rejected every scrape of kube-state-metrics, so kube_* metrics (and the
+  # Flux gotk_resource_info series) never reached Prometheus — silently,
+  # since the target-down alerts routed to the null receiver.
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: kube-state-metrics
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/name: prometheus
+    ports:
+    - protocol: TCP
+      port: 8080  # metrics
+    - protocol: TCP
+      port: 8081  # telemetry (self-metrics)
+  egress:
+  # Watches the Kubernetes API (port-only egress, same pattern as grafana)
+  - ports:
+    - protocol: TCP
+      port: 443
+    - protocol: TCP
+      port: 6443
+  # DNS
+  - to:
+    - namespaceSelector: {}
+    ports:
+    - protocol: TCP
+      port: 53
+    - protocol: UDP
+      port: 53
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
   name: allow-grafana
   namespace: monitoring
 spec:
