@@ -150,9 +150,13 @@ metadata:
   name: allow-alertmanager
   namespace: monitoring
 spec:
+  # NB: modern kube-prometheus-stack pods carry app.kubernetes.io/name, not
+  # the legacy bare "app" label — the old selectors here never matched
+  # anything, so default-deny silently rejected ALL alertmanager traffic
+  # (including DNS, Telegram delivery, and Prometheus -> alertmanager 9093).
   podSelector:
     matchLabels:
-      app: alertmanager
+      app.kubernetes.io/name: alertmanager
   policyTypes:
   - Ingress
   - Egress
@@ -163,7 +167,7 @@ spec:
           kubernetes.io/metadata.name: ingress-nginx
     - podSelector:
         matchLabels:
-          app: prometheus
+          app.kubernetes.io/name: prometheus
     ports:
     - protocol: TCP
       port: 9093
@@ -171,13 +175,13 @@ spec:
   - to:
     - podSelector:
         matchLabels:
-          app: alertmanager
+          app.kubernetes.io/name: alertmanager
     ports:
     - protocol: TCP
       port: 9093
     - protocol: TCP
       port: 9094
-  - {}  # Allow outbound traffic for alerts (email, webhook, etc.)
+  - {}  # Allow outbound traffic for alerts (Telegram, webhooks, DNS)
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
