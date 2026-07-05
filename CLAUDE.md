@@ -141,4 +141,5 @@ Single-node homelab -- be conservative with resources. Current allocations:
 - **Loki/Tempo charts** add pod anti-affinity by default -- must be disabled for single-node
 - **Grafana sidecars** in kube-prometheus-stack need K8s API egress (NetworkPolicy must allow it)
 - **Grafana datasource provisioning** -- `additionalDataSources` must not include Prometheus or Alertmanager (the chart's sidecar already provisions these). Adding them again causes Grafana 12 to crash with "data source not found". Loki and Tempo must have explicit `uid:` fields so cross-datasource references (tracesToLogsV2, serviceMap) resolve correctly.
+- **Grafana is stateless** (`persistence.enabled: false`) -- a persisted grafana.db can hold datasource rows whose uids predate the provisioned ones, which Grafana 12 treats as a fatal startup error (this crashlooped Grafana for 74 days). Everything is provisioned from this repo; do not create dashboards in the UI and expect them to survive a restart.
 - **NFS PV ownership** -- new chart versions may run as different UIDs. Delete PVC and let it recreate if permissions break.

@@ -48,10 +48,13 @@ spec:
     # Grafana configuration
     grafana:
       enabled: true
+      # Stateless: everything (datasources, dashboards) is provisioned from
+      # this repo, so the DB is rebuilt from provisioning on every start. A
+      # persisted grafana.db can hold datasource rows whose uids predate the
+      # pinned ones below — Grafana 12 treats that provisioning mismatch as a
+      # fatal startup error (crashlooped for 74 days in 2026-04..07).
       persistence:
-        enabled: true
-        storageClassName: nfs-client
-        size: 10Gi
+        enabled: false
       admin:
         existingSecret: "grafana-admin-credentials"
         userKey: admin-user
