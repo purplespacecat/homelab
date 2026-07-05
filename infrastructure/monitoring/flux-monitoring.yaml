@@ -1,72 +1,34 @@
 ---
-# ServiceMonitor for Flux Source Controller
+# Scrape the Flux controllers' metrics.
+#
+# A PodMonitor, not ServiceMonitors: Flux's Services expose only port 80
+# (http) — the http-prom metrics port exists solely on the pods, so the four
+# ServiceMonitors this file used to hold never scraped anything (they also
+# lacked the `release: prometheus-stack` label the Prometheus operator
+# selects on). Per-resource readiness (gotk_resource_info) comes from
+# kube-state-metrics customResourceState in prometheus-stack.yaml; this
+# covers controller-level metrics (reconcile durations, workqueues, errors).
 apiVersion: monitoring.coreos.com/v1
-kind: ServiceMonitor
+kind: PodMonitor
 metadata:
-  name: source-controller
+  name: flux-controllers
   namespace: flux-system
   labels:
     app.kubernetes.io/part-of: flux
-    app.kubernetes.io/component: source-controller
+    release: prometheus-stack
 spec:
+  namespaceSelector:
+    matchNames:
+      - flux-system
   selector:
-    matchLabels:
-      app: source-controller
-  endpoints:
+    matchExpressions:
+      - key: app
+        operator: In
+        values:
+          - source-controller
+          - kustomize-controller
+          - helm-controller
+          - notification-controller
+  podMetricsEndpoints:
     - port: http-prom
       interval: 30s
-      path: /metrics
----
-# ServiceMonitor for Flux Kustomize Controller
-apiVersion: monitoring.coreos.com/v1
-kind: ServiceMonitor
-metadata:
-  name: kustomize-controller
-  namespace: flux-system
-  labels:
-    app.kubernetes.io/part-of: flux
-    app.kubernetes.io/component: kustomize-controller
-spec:
-  selector:
-    matchLabels:
-      app: kustomize-controller
-  endpoints:
-    - port: http-prom
-      interval: 30s
-      path: /metrics
----
-# ServiceMonitor for Flux Helm Controller
-apiVersion: monitoring.coreos.com/v1
-kind: ServiceMonitor
-metadata:
-  name: helm-controller
-  namespace: flux-system
-  labels:
-    app.kubernetes.io/part-of: flux
-    app.kubernetes.io/component: helm-controller
-spec:
-  selector:
-    matchLabels:
-      app: helm-controller
-  endpoints:
-    - port: http-prom
-      interval: 30s
-      path: /metrics
----
-# ServiceMonitor for Flux Notification Controller
-apiVersion: monitoring.coreos.com/v1
-kind: ServiceMonitor
-metadata:
-  name: notification-controller
-  namespace: flux-system
-  labels:
-    app.kubernetes.io/part-of: flux
-    app.kubernetes.io/component: notification-controller
-spec:
-  selector:
-    matchLabels:
-      app: notification-controller
-  endpoints:
-    - port: http-prom
-      interval: 30s
-      path: /metrics

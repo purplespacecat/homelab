@@ -130,7 +130,8 @@ Single-node homelab -- be conservative with resources. Current allocations:
 ## Secrets
 
 - Grafana credentials: `grafana-admin-credentials` Secret in monitoring namespace (must be created manually before deploy)
-- Flux GitHub token: `flux-system` Secret in flux-system namespace (created during bootstrap)
+- Flux GitHub token: `flux-system` Secret in flux-system namespace (created during bootstrap; **expires** — see Known Pitfalls)
+- Telegram bot token: `alertmanager-telegram` Secret in monitoring namespace, key `token` (must be created manually before deploy; used by Alertmanager for alert delivery)
 - Let's Encrypt account key: managed by cert-manager
 - No SOPS or sealed-secrets currently configured
 
@@ -143,3 +144,4 @@ Single-node homelab -- be conservative with resources. Current allocations:
 - **Grafana datasource provisioning** -- `additionalDataSources` must not include Prometheus or Alertmanager (the chart's sidecar already provisions these). Adding them again causes Grafana 12 to crash with "data source not found". Loki and Tempo must have explicit `uid:` fields so cross-datasource references (tracesToLogsV2, serviceMap) resolve correctly.
 - **Grafana is stateless** (`persistence.enabled: false`) -- a persisted grafana.db can hold datasource rows whose uids predate the provisioned ones, which Grafana 12 treats as a fatal startup error (this crashlooped Grafana for 74 days). Everything is provisioned from this repo; do not create dashboards in the UI and expect them to survive a restart.
 - **NFS PV ownership** -- new chart versions may run as different UIDs. Delete PVC and let it recreate if permissions break.
+- **Flux GitHub token expiry freezes syncing silently** -- everything reports Ready at a stale revision while the GitRepository fails every fetch with "authentication required" (bit us 2026-07). The `FluxGitSourceNotReady` alert (flux-alerts.yaml → Telegram) now fires within ~5 minutes; on rotation, update the `flux-system` Secret with the new PAT (Contents: Read-only on this repo suffices).

@@ -8,3 +8,7 @@ data:
   NFS_SERVER: "192.168.100.98"
   METALLB_IP_RANGE: "192.168.100.200-192.168.100.250"
   NETWORK_INTERFACE: "wlp2s0"
+  # Telegram chat that receives Alertmanager notifications. Not a credential
+  # (useless without the bot token, which lives in the manually-created
+  # alertmanager-telegram Secret).
+  TELEGRAM_CHAT_ID: "361187791"

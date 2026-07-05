@@ -147,6 +147,42 @@ spec:
               resources:
                 requests:
                   storage: 10Gi
+        # Mounts the manually-created Secret (see CLAUDE.md "Secrets") at
+        # /etc/alertmanager/secrets/alertmanager-telegram/ — the bot token
+        # never appears in this (public) repo.
+        secrets:
+          - alertmanager-telegram
+      # Route warning/critical to Telegram. The chat id is not a credential
+      # (useless without the bot token) so substitution from cluster-config
+      # is fine. Watchdog and info-level alerts stay on the null receiver.
+      config:
+        route:
+          receiver: "null"
+          group_by: ["alertname", "namespace"]
+          group_wait: 30s
+          group_interval: 5m
+          repeat_interval: 12h
+          routes:
+            - receiver: telegram
+              matchers:
+                - severity =~ "warning|critical"
+        receivers:
+          - name: "null"
+          - name: telegram
+            telegram_configs:
+              - bot_token_file: /etc/alertmanager/secrets/alertmanager-telegram/token
+                chat_id: ${TELEGRAM_CHAT_ID}
+                parse_mode: HTML
+                send_resolved: true
+                message: |-
+                  {{ if eq .Status "firing" }}🔴{{ else }}✅{{ end }} <b>{{ .CommonLabels.alertname }}</b> ({{ .Status }})
+                  {{ range .Alerts }}{{ .Annotations.summary }}
+                  {{ .Annotations.description }}
+                  {{ end }}
+        inhibit_rules:
+          - source_matchers: ['severity = "critical"']
+            target_matchers: ['severity = "warning"']
+            equal: ["alertname", "namespace"]
       ingress:
         enabled: true
         ingressClassName: nginx
@@ -169,6 +205,104 @@ spec:
       enabled: true
     kubeStateMetrics:
       enabled: true
+
+    # kube-state-metrics subchart: export Flux CR readiness as
+    # gotk_resource_info metrics (Flux controllers no longer expose
+    # per-resource status themselves — this is the flux2-monitoring-example
+    # approach). Powers the flux-alerts PrometheusRule, most importantly
+    # FluxGitSourceNotReady: the "GitHub token expired, cluster silently
+    # frozen" alarm (bitten by this 2026-07).
+    kube-state-metrics:
+      rbac:
+        extraRules:
+          - apiGroups:
+              - source.toolkit.fluxcd.io
+              - kustomize.toolkit.fluxcd.io
+              - helm.toolkit.fluxcd.io
+            resources:
+              - gitrepositories
+              - helmrepositories
+              - kustomizations
+              - helmreleases
+            verbs: ["list", "watch"]
+      customResourceState:
+        enabled: true
+        config:
+          spec:
+            resources:
+              - groupVersionKind:
+                  group: kustomize.toolkit.fluxcd.io
+                  version: v1
+                  kind: Kustomization
+                metricNamePrefix: gotk
+                metrics:
+                  - name: resource_info
+                    help: The current state of a Flux Kustomization resource.
+                    each:
+                      type: Info
+                      info:
+                        labelsFromPath:
+                          name: [metadata, name]
+                    labelsFromPath:
+                      exported_namespace: [metadata, namespace]
+                      ready: [status, conditions, "[type=Ready]", status]
+                      suspended: [spec, suspend]
+                      revision: [status, lastAppliedRevision]
+              - groupVersionKind:
+                  group: source.toolkit.fluxcd.io
+                  version: v1
+                  kind: GitRepository
+                metricNamePrefix: gotk
+                metrics:
+                  - name: resource_info
+                    help: The current state of a Flux GitRepository resource.
+                    each:
+                      type: Info
+                      info:
+                        labelsFromPath:
+                          name: [metadata, name]
+                    labelsFromPath:
+                      exported_namespace: [metadata, namespace]
+                      ready: [status, conditions, "[type=Ready]", status]
+                      suspended: [spec, suspend]
+                      revision: [status, artifact, revision]
+                      url: [spec, url]
+              - groupVersionKind:
+                  group: source.toolkit.fluxcd.io
+                  version: v1
+                  kind: HelmRepository
+                metricNamePrefix: gotk
+                metrics:
+                  - name: resource_info
+                    help: The current state of a Flux HelmRepository resource.
+                    each:
+                      type: Info
+                      info:
+                        labelsFromPath:
+                          name: [metadata, name]
+                    labelsFromPath:
+                      exported_namespace: [metadata, namespace]
+                      ready: [status, conditions, "[type=Ready]", status]
+                      suspended: [spec, suspend]
+                      url: [spec, url]
+              - groupVersionKind:
+                  group: helm.toolkit.fluxcd.io
+                  version: v2
+                  kind: HelmRelease
+                metricNamePrefix: gotk
+                metrics:
+                  - name: resource_info
+                    help: The current state of a Flux HelmRelease resource.
+                    each:
+                      type: Info
+                      info:
+                        labelsFromPath:
+                          name: [metadata, name]
+                    labelsFromPath:
+                      exported_namespace: [metadata, namespace]
+                      ready: [status, conditions, "[type=Ready]", status]
+                      suspended: [spec, suspend]
+                      revision: [status, lastAppliedRevision]
 
     # Prometheus Operator
     prometheusOperator:
