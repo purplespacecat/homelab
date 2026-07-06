@@ -175,6 +175,14 @@ spec:
                 target_label: __host__
               - action: labelmap
                 regex: __meta_kubernetes_pod_label_(.+)
+              # Drop junk/high-cardinality labels the labelmap above hoovers up.
+              # pod_template_hash & friends change on every rollout (index bloat)
+              # and pushed the prometheus-operator stream to 16 labels — over
+              # Loki's max_label_names_per_series (15), so its logs were being
+              # DROPPED with 400s. Dropping at the source beats raising the
+              # limit. (vault: diagnostics/2026-07-06-sweep.md)
+              - action: labeldrop
+                regex: (pod_template_hash|controller_revision_hash|app_kubernetes_io_managed_by|app_kubernetes_io_version|app_kubernetes_io_part_of|chart|heritage|helm_sh_chart)
               - source_labels:
                   - __meta_kubernetes_namespace
                 target_label: namespace
