@@ -1,0 +1,74 @@
+# Read-only diagnostic identity for the Claude k3s-diagnostician agent.
+# Design: built-in `view` ClusterRole (deliberately excludes Secrets) plus a
+# narrow extras role (nodes, PVs, Flux CRs, metrics, CRDs, StorageClasses).
+# No mutations, no exec, no secrets — enforced by RBAC, not by agent goodwill.
+# The token below is generated server-side (no secret material lives in git);
+# the laptop-side kubeconfig is ~/.kube/claude-ro.yaml (re-mint from this
+# secret if the token rotates). Namespace: k8s/core/namespaces/.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: claude-diagnostician
+  namespace: diagnostics
+---
+# Long-lived token (homelab pragmatism; rotate by deleting this secret)
+apiVersion: v1
+kind: Secret
+metadata:
+  name: claude-diagnostician-token
+  namespace: diagnostics
+  annotations:
+    kubernetes.io/service-account.name: claude-diagnostician
+type: kubernetes.io/service-account-token
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: claude-diagnostician-view
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: view
+subjects:
+- kind: ServiceAccount
+  name: claude-diagnostician
+  namespace: diagnostics
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: claude-diagnostician-extra
+rules:
+- apiGroups: [""]
+  resources: ["nodes", "persistentvolumes"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["metrics.k8s.io"]
+  resources: ["pods", "nodes"]
+  verbs: ["get", "list"]
+- apiGroups:
+  - source.toolkit.fluxcd.io
+  - kustomize.toolkit.fluxcd.io
+  - helm.toolkit.fluxcd.io
+  - notification.toolkit.fluxcd.io
+  - image.toolkit.fluxcd.io
+  resources: ["*"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["apiextensions.k8s.io"]
+  resources: ["customresourcedefinitions"]
+  verbs: ["get", "list"]
+- apiGroups: ["storage.k8s.io"]
+  resources: ["storageclasses"]
+  verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: claude-diagnostician-extra
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: claude-diagnostician-extra
+subjects:
+- kind: ServiceAccount
+  name: claude-diagnostician
+  namespace: diagnostics
