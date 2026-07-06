@@ -1,0 +1,22 @@
+# k3s's built-in local-path SC, adopted into GitOps for ONE reason: to pin
+# storageclass.kubernetes.io/is-default-class to "false". Both local-path and
+# nfs-client carried is-default-class=true (ambiguous; newest-wins resolution
+# happened to pick nfs-client, but a recreated SC could silently flip it).
+# nfs-client is the intended sole default (set by the nfs-provisioner HR).
+#
+# k3s's deploy controller re-applies its packaged manifest (default "true") on
+# every k3s restart — Flux (core-storage) reconciles this file and forces it
+# back to "false" within minutes. During that brief tug-of-war window the
+# newest-wins rule still resolves to nfs-client (newer SC), so there is no
+# exposure. Don't hand-patch the annotation; edit this file.
+#
+# Spec fields are immutable and MUST mirror the live object exactly.
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: local-path
+  annotations:
+    storageclass.kubernetes.io/is-default-class: "false"
+provisioner: rancher.io/local-path
+reclaimPolicy: Delete
+volumeBindingMode: WaitForFirstConsumer
