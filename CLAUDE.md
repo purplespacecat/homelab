@@ -69,6 +69,7 @@ Cluster-specific values are centralized in `clusters/homelab/cluster-config.yaml
 - **NetworkPolicies** use default-deny in the monitoring namespace with explicit allow rules. Grafana needs K8s API + DNS egress for sidecars.
 - **Storage** uses NFS with dynamic provisioning via `nfs-client` StorageClass.
 - **Ingress** uses `hostNetwork: true` on NGINX (WiFi workaround -- MetalLB L2 is unreliable over WiFi). Service type is ClusterIP, not LoadBalancer.
+- **Only Grafana gets an ingress** (TLS via `homelab-ca-issuer`, login required). Prometheus and Alertmanager UIs are unauthenticated and stay off the network -- `kubectl port-forward` on demand. Don't add ingresses for them.
 - **Single-node considerations:** Disable pod anti-affinity in chart values (e.g., Loki `gateway.affinity: {}`), use `Recreate` deployment strategy where rolling updates would deadlock.
 
 ## Deployed Stack
@@ -78,7 +79,7 @@ Cluster-specific values are centralized in `clusters/homelab/cluster-config.yaml
 | NFS Provisioner | 4.0.18 | kube-system | StorageClass: nfs-client (default) |
 | MetalLB | 0.15.3 | metallb-system | L2 mode, WiFi interface |
 | NGINX Ingress | 4.15.1 | ingress-nginx | hostNetwork, DaemonSet |
-| cert-manager | v1.20.1 | cert-manager | Let's Encrypt + self-signed CA |
+| cert-manager | v1.20.1 | cert-manager | Homelab CA only (`homelab-ca-issuer`; no ACME -- LAN-only cluster can't pass HTTP-01) |
 | Prometheus Stack | 82.17.1 | monitoring | Prometheus, Grafana, Alertmanager, Node Exporter, KSM |
 | Loki | 6.55.0 | monitoring | SingleBinary mode, 10Gi NFS |
 | Promtail | 6.17.1 | monitoring | DaemonSet, collects all pod logs |
@@ -87,7 +88,7 @@ Cluster-specific values are centralized in `clusters/homelab/cluster-config.yaml
 ## Prerequisites for Cluster Rebuild
 
 Before Flux can fully deploy, these must exist:
-1. **Grafana credentials Secret** -- `kubectl create secret generic grafana-admin-credentials -n monitoring --from-literal=admin-user=admin --from-literal=admin-password=<password>`
+1. **Out-of-band Secrets** -- run `./scripts/common/bootstrap-secrets.sh` (creates `grafana-admin-credentials` and `alertmanager-telegram` in monitoring; idempotent, also used for rotation)
 2. **Flux GitHub token** -- Created during `flux bootstrap`
 3. **NFS server** running at the configured `NFS_SERVER` IP with `/data` exported
 
@@ -129,11 +130,10 @@ Single-node homelab -- be conservative with resources. Current allocations:
 
 ## Secrets
 
-- Grafana credentials: `grafana-admin-credentials` Secret in monitoring namespace (must be created manually before deploy)
+- Grafana credentials: `grafana-admin-credentials` Secret in monitoring namespace (created by `scripts/common/bootstrap-secrets.sh`)
 - Flux GitHub token: `flux-system` Secret in flux-system namespace (created during bootstrap; **expires** — see Known Pitfalls)
-- Telegram bot token: `alertmanager-telegram` Secret in monitoring namespace, key `token` (must be created manually before deploy; used by Alertmanager for alert delivery)
-- Let's Encrypt account key: managed by cert-manager
-- No SOPS or sealed-secrets currently configured
+- Telegram bot token: `alertmanager-telegram` Secret in monitoring namespace, key `token` (created by `scripts/common/bootstrap-secrets.sh`; used by Alertmanager for alert delivery)
+- No SOPS or sealed-secrets currently configured (deliberate: two manual secrets beat encryption machinery at this scale, and it's why the repo can stay public)
 
 ## Known Pitfalls
 

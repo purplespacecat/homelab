@@ -38,12 +38,8 @@ spec:
           limits:
             cpu: 1000m
             memory: 1Gi
-      ingress:
-        enabled: true
-        ingressClassName: nginx
-        hosts:
-          - prometheus.${NODE_IP}.nip.io
-          - prometheus.local
+      # No ingress: the Prometheus UI/API is unauthenticated — port-forward
+      # on demand instead of exposing it to the LAN (see docs/alerting.md).
 
     # Grafana configuration
     grafana:
@@ -62,9 +58,19 @@ spec:
       ingress:
         enabled: true
         ingressClassName: nginx
+        # TLS from the homelab CA (k8s/cert-manager/local-ca.yaml); nginx
+        # redirects HTTP→HTTPS once tls: is set. Trust the CA in your browser
+        # via scripts/common/extract-ca-cert.sh.
+        annotations:
+          cert-manager.io/cluster-issuer: homelab-ca-issuer
         hosts:
           - grafana.${NODE_IP}.nip.io
           - grafana.local
+        tls:
+          - secretName: grafana-tls
+            hosts:
+              - grafana.${NODE_IP}.nip.io
+              - grafana.local
       # Dashboards from Grafana.com
       dashboardProviders:
         dashboardproviders.yaml:
@@ -183,12 +189,9 @@ spec:
           - source_matchers: ['severity = "critical"']
             target_matchers: ['severity = "warning"']
             equal: ["alertname", "namespace"]
-      ingress:
-        enabled: true
-        ingressClassName: nginx
-        hosts:
-          - alertmanager.${NODE_IP}.nip.io
-          - alertmanager.local
+      # No ingress: the Alertmanager UI/API is unauthenticated — anyone on
+      # the LAN could silence real alerts or inject fakes into the Telegram
+      # pipe. Port-forward on demand (see docs/alerting.md).
 
     # Disable components not available in some clusters
     kubeScheduler:

@@ -38,6 +38,7 @@ This repo contains files and scripts for a Kubernetes homelab with support for b
 - ⚡ [Flux Cheat Sheet](docs/flux-cheatsheet.md) - Quick reference
 - 🔧 [FluxCD Setup Guide](docs/fluxcd-guide.md) - Installation & concepts
 - 🆚 [GitOps Comparison](docs/gitops-comparison.md) - Flux vs Argo
+- 🚨 [Alerting Architecture](docs/alerting.md) - Metrics → Prometheus → Alertmanager → Telegram, traced end to end
 
 ## Repository Structure
 
@@ -94,9 +95,12 @@ All components are managed by FluxCD and automatically deployed from this reposi
 - **Tempo** (monitoring) - Distributed tracing backend
 
 **Access URLs:**
-- Grafana: `http://grafana.192.168.100.98.nip.io` (credentials in `grafana-admin-credentials` Secret)
-- Prometheus: `http://prometheus.192.168.100.98.nip.io`
-- Alertmanager: `http://alertmanager.192.168.100.98.nip.io`
+- Grafana: `https://grafana.192.168.100.98.nip.io` (TLS from the homelab CA; credentials in `grafana-admin-credentials` Secret)
+- Prometheus / Alertmanager: **no ingress on purpose** (their UIs are unauthenticated) — port-forward on demand:
+  ```bash
+  kubectl -n monitoring port-forward svc/prometheus-stack-kube-prom-prometheus 9090:9090
+  kubectl -n monitoring port-forward svc/prometheus-stack-kube-prom-alertmanager 9093:9093
+  ```
 
 ## Available Scripts
 
@@ -128,8 +132,8 @@ All components are managed by FluxCD and automatically deployed from this reposi
 - **common/secure-nfs.sh** - Secure NFS exports
 - **common/install-calico.sh** - Standalone Calico CNI install
 - **common/verify-exposure.sh** - Verify service URLs
-- **common/extract-ca-cert.sh** - Extract cluster CA certificate
-- **common/generate-grafana-creds.sh** - Generate Grafana credentials
+- **common/extract-ca-cert.sh** - Export the homelab CA cert for browser import
+- **common/bootstrap-secrets.sh** - Create the out-of-band Secrets (Grafana admin, Telegram bot token)
 
 ## Quick Start
 
@@ -241,9 +245,8 @@ To remove all helm-installed components:
 The monitoring stack (Prometheus, Grafana, Alertmanager) is automatically deployed via FluxCD.
 
 **Current Stack (deployed):**
-- Prometheus: `http://prometheus.192.168.100.98.nip.io`
-- Grafana: `http://grafana.192.168.100.98.nip.io` (credentials in `grafana-admin-credentials` Secret)
-- Alertmanager: `http://alertmanager.192.168.100.98.nip.io`
+- Grafana: `https://grafana.192.168.100.98.nip.io` (credentials in `grafana-admin-credentials` Secret)
+- Prometheus / Alertmanager: port-forward only — unauthenticated UIs are kept off the network
 
 **GitOps Management:**
 
@@ -445,9 +448,9 @@ kubectl get nodes -o wide
 **Accessing Services**:
 
 Services can be accessed via nip.io domains using your node IP (get it with `kubectl get nodes -o wide`):
-- `http://prometheus.<NODE-IP>.nip.io`
-- `http://grafana.<NODE-IP>.nip.io`
-- `http://alertmanager.<NODE-IP>.nip.io`
+- `https://grafana.<NODE-IP>.nip.io`
+
+(Prometheus and Alertmanager have no ingress — their UIs are unauthenticated, so use `kubectl port-forward` instead; see the Access URLs section above.)
 
 **How nip.io works**: It's a magic DNS service that automatically resolves any hostname containing an IP to that IP. No configuration needed!
 
@@ -455,18 +458,16 @@ If nip.io doesn't work on your network, add entries to your hosts file:
 
 **Windows**: Edit `C:\Windows\System32\drivers\etc\hosts` (as Administrator)
 ```
-<NODE-IP> prometheus.local grafana.local alertmanager.local
+<NODE-IP> grafana.local
 ```
 
 **Linux/Mac**: Edit `/etc/hosts` (with sudo)
 ```
-<NODE-IP> prometheus.local grafana.local alertmanager.local
+<NODE-IP> grafana.local
 ```
 
 Then access services via:
-- `http://prometheus.local`
-- `http://grafana.local`
-- `http://alertmanager.local`
+- `https://grafana.local`
 
 **Create an Ingress** (example):
 ```yaml
@@ -653,7 +654,7 @@ sudo ./scripts/kubeadm/join-worker-node.sh
 - `clusters/homelab/` - FluxCD cluster configuration
 - `infrastructure/` - All Helm releases and sources
 - `k8s/core/networking/metallb-config.yaml` - Your IP pool configuration
-- `k8s/cert-manager/cert-manager-issuers.yaml` - Certificate issuer email
+- `k8s/cert-manager/local-ca.yaml` - Homelab CA issuer chain (TLS for ingresses)
 
 **Recovery Time**:
 - **With FluxCD**: ~10-15 minutes (automated)
@@ -667,12 +668,12 @@ Before deploying, ensure these are configured for your environment:
 - [ ] **MetalLB Interface**: Update `interfaces` in metallb-config.yaml (currently: `wlp2s0`)
 - [ ] **NFS Server IP**: Used in storage and provisioner scripts (currently: `192.168.100.98`)
 - [ ] **Firewall Network Range**: Update `192.168.100.0/24` in firewall scripts if different
-- [ ] **Let's Encrypt Email**: Update in `k8s/cert-manager/cert-manager-issuers.yaml`
-- [ ] **Prometheus Hosts**: Update nip.io IPs in `infrastructure/monitoring/prometheus-stack.yaml`
+- [ ] **Telegram Chat ID**: Update `TELEGRAM_CHAT_ID` in `clusters/homelab/cluster-config.yaml` (alert delivery)
+- [ ] **Grafana Host**: nip.io hostname derives from `${NODE_IP}` in `clusters/homelab/cluster-config.yaml`
 
 ## Important Notes
 
-- **Default Credentials**: Grafana uses `grafana-admin-credentials` Secret - create it before deploying
+- **Default Credentials**: run `./scripts/common/bootstrap-secrets.sh` before deploying — it creates the Grafana admin and Telegram token Secrets (the only two secrets not managed by Flux)
 - **NFS Permissions**: Using `777` is for lab environments only; secure for production with `./scripts/secure-nfs.sh`
 - **Firewall**: Ensure ports 80/443 are open on master node for external access
 - **nip.io**: Free DNS service; consider proper DNS for production

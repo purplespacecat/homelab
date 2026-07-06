@@ -23,7 +23,6 @@ The homelab uses a **hostNetwork-based** NGINX Ingress Controller due to WiFi ne
 
 The magic happens in the hostname itself:
 
-- `prometheus.192.168.100.98.nip.io` → Resolves to `192.168.100.98`
 - `grafana.192.168.100.98.nip.io` → Resolves to `192.168.100.98`
 - `anything.<YOUR-IP>.nip.io` → Resolves to `<YOUR-IP>`
 
@@ -44,7 +43,7 @@ If nip.io doesn't work on your network (some corporate networks block it):
    ```bash
    # Linux/Mac: /etc/hosts
    # Windows: C:\Windows\System32\drivers\etc\hosts
-   192.168.100.98 prometheus.local grafana.local alertmanager.local
+   192.168.100.98 grafana.local
    ```
 
 2. **Local DNS server** (Pi-hole, dnsmasq, etc.):
@@ -348,7 +347,7 @@ spec:
    notepad C:\Windows\System32\drivers\etc\hosts
 
    # Add (replace <NODE-IP> with your actual node IP):
-   <NODE-IP> prometheus.local grafana.local alertmanager.local
+   <NODE-IP> grafana.local
    ```
 
 3. **Check if network blocks external DNS**:

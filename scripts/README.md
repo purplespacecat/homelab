@@ -71,8 +71,8 @@ Utilities that work with both K3s and kubeadm clusters.
 
 ### Utilities
 - `verify-exposure.sh` - Check service URLs and accessibility
-- `extract-ca-cert.sh` - Export cluster CA certificate
-- `generate-grafana-creds.sh` - Generate Grafana credentials
+- `extract-ca-cert.sh` - Export the homelab CA cert for browser import
+- `bootstrap-secrets.sh` - Create the out-of-band Secrets (Grafana admin, Telegram bot token)
 - `install-calico.sh` - Standalone Calico CNI installation
 
 ## Script Design
