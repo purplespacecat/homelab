@@ -16,6 +16,7 @@ clusters/homelab/          # FluxCD Kustomization entrypoints (sync points)
   networking.yaml          # MetalLB + NGINX Ingress
   security.yaml            # cert-manager
   monitoring.yaml          # Prometheus, Grafana, Loki, Promtail, Tempo
+  media.yaml               # Jellyfin
 
 infrastructure/            # Actual HelmRelease and Kustomize definitions
   sources/                 # HelmRepository CRDs (6 repos)
@@ -24,6 +25,7 @@ infrastructure/            # Actual HelmRelease and Kustomize definitions
   networking/              # MetalLB + ingress-nginx HelmReleases
   security/                # cert-manager HelmRelease
   monitoring/              # prometheus-stack, loki, promtail, tempo HelmReleases + alerts
+  media/                   # jellyfin HelmRelease
 
 k8s/                       # Raw Kubernetes manifests
   core/                    # Namespaces, MetalLB config, NFS config, NetworkPolicies
@@ -46,6 +48,7 @@ sources (Helm repos)
     -> storage (NFS provisioner)
       -> networking (MetalLB, NGINX Ingress)
         -> monitoring (Prometheus, Grafana, Loki, Promtail, Tempo)
+          -> media (Jellyfin; after monitoring only for the ServiceMonitor CRD)
     -> security (cert-manager)
 ```
 
@@ -84,6 +87,7 @@ Cluster-specific values are centralized in `clusters/homelab/cluster-config.yaml
 | Loki | 6.55.0 | monitoring | SingleBinary mode, 10Gi NFS |
 | Promtail | 6.17.1 | monitoring | DaemonSet, collects all pod logs |
 | Tempo | 1.24.4 | monitoring | Distributed tracing, 7d retention |
+| Jellyfin | 3.2.0 | media | HTTP ingress (nip.io), QSV via /dev/dri, media RO hostPath from USB HDD (`scripts/common/mount-media-hdd.sh`) |
 
 ## Prerequisites for Cluster Rebuild
 

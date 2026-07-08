@@ -1,0 +1,25 @@
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: media
+  namespace: flux-system
+spec:
+  interval: 10m
+  dependsOn:
+    - name: core-infrastructure
+    - name: networking
+    - name: sources
+    # Not a real runtime dependency, but the Jellyfin chart's ServiceMonitor
+    # needs the CRD that prometheus-stack installs — ordering it here keeps a
+    # from-scratch rebuild deterministic.
+    - name: monitoring
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+  path: ./infrastructure/media
+  prune: true
+  wait: true
+  postBuild:
+    substituteFrom:
+      - kind: ConfigMap
+        name: cluster-config

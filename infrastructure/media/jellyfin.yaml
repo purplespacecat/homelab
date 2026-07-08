@@ -1,0 +1,139 @@
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: jellyfin
+  namespace: media
+spec:
+  interval: 5m
+  chart:
+    spec:
+      chart: jellyfin
+      version: 3.2.0
+      sourceRef:
+        kind: HelmRepository
+        name: jellyfin
+        namespace: flux-system
+  values:
+    # Single node + RWO config PVC: a rolling update would double-open the
+    # SQLite DB; Recreate is the repo-wide convention for this.
+    deploymentStrategy:
+      type: Recreate
+
+    # Privileged for /dev/dri (QSV/VAAPI hardware transcoding). The Intel GPU
+    # device plugin is the "proper" way but is heavyweight for one node —
+    # privileged with this comment is the honest single-node trade-off.
+    securityContext:
+      privileged: true
+
+    persistence:
+      config:
+        enabled: true
+        # SQLite lives here — NFS corrupts SQLite (same rule as the Loki
+        # migration). local-path is deliberately non-default, so name it.
+        storageClass: local-path
+        accessMode: ReadWriteOnce
+        size: 10Gi
+      media:
+        enabled: true
+        type: hostPath
+        # The external HDD, mounted by scripts/common/mount-media-hdd.sh.
+        # Jellyfin sees only the media/ subdir, never the backups beside it.
+        hostPath: /mnt/media/media
+        readOnly: true
+      cache:
+        # emptyDir on the node disk: transcode scratch. Deliberately NOT a
+        # tmpfs/PVC — RAM is scarce (8GB node) and the data is disposable.
+        enabled: false
+
+    # QSV/VAAPI device for hardware transcoding
+    volumes:
+      - name: dri
+        hostPath:
+          path: /dev/dri
+          type: Directory
+    volumeMounts:
+      - name: dri
+        mountPath: /dev/dri
+
+    # Guard against the empty-mountpoint hazard: hostPath "succeeds" even when
+    # the HDD isn't mounted (pod would see an empty dir and mark the whole
+    # library missing). The .mounted marker lives ON the drive, so drive
+    # absent -> pod fails loudly here instead.
+    extraInitContainers:
+      - name: check-media-mounted
+        image: busybox:1.36
+        command:
+          - sh
+          - -c
+          - >
+            test -f /media/.mounted ||
+            { echo "media HDD not mounted on host — run scripts/common/mount-media-hdd.sh"; exit 1; }
+        volumeMounts:
+          - name: media
+            mountPath: /media
+            readOnly: true
+
+    # Plain HTTP by design: the Android TV Jellyfin app can't trust the
+    # homelab CA, and adding tls: would force nginx's HTTP->HTTPS redirect.
+    # Jellyfin has its own login, unlike the Prometheus/Alertmanager UIs.
+    ingress:
+      enabled: true
+      className: nginx
+      hosts:
+        - host: jellyfin.${NODE_IP}.nip.io
+          paths:
+            - path: /
+              pathType: Prefix
+
+    # Hard cap so a runaway transcode can't starve the monitoring stack.
+    resources:
+      requests:
+        cpu: 250m
+        memory: 256Mi
+      limits:
+        cpu: 3
+        memory: 2560Mi
+
+    metrics:
+      enabled: true
+      serviceMonitor:
+        enabled: true
+        # Prometheus selects ServiceMonitors by this label (see the live
+        # Prometheus spec.serviceMonitorSelector) — without it, no scrape.
+        labels:
+          release: prometheus-stack
+
+  # The chart offers no mountPropagation on the media mount. HostToContainer
+  # makes a host-side remount (HDD replug + mount -a) reach a running pod
+  # instead of it keeping the dead mount until restart. Strategic-merge keyed
+  # on mountPath, so it survives chart-side mount reordering.
+  postRenderers:
+    - kustomize:
+        patches:
+          - target:
+              kind: Deployment
+              name: jellyfin
+            patch: |
+              apiVersion: apps/v1
+              kind: Deployment
+              metadata:
+                name: jellyfin
+              spec:
+                template:
+                  spec:
+                    containers:
+                      - name: jellyfin
+                        volumeMounts:
+                          - name: media
+                            mountPath: /media
+                            mountPropagation: HostToContainer
+
+  install:
+    # Namespace is Git-managed (k8s/core/namespaces/media-namespace.yaml)
+    createNamespace: false
+    remediation:
+      retries: 3
+  upgrade:
+    remediation:
+      retries: 3
