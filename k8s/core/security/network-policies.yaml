@@ -33,6 +33,23 @@ spec:
     - protocol: TCP
       port: 9090
   egress:
+  # Kubernetes API — REQUIRED for service discovery. Without it the scrape
+  # ports below are moot: SD returns zero targets, so Prometheus scrapes
+  # nothing (not even itself) and every existing alert goes silently blind.
+  # Same port-only pattern as allow-grafana / allow-kube-state-metrics.
+  - ports:
+    - protocol: TCP
+      port: 443
+    - protocol: TCP
+      port: 6443
+  # DNS — resolve scrape-target and API service names.
+  - to:
+    - namespaceSelector: {}
+    ports:
+    - protocol: TCP
+      port: 53
+    - protocol: UDP
+      port: 53
   - to:
     - namespaceSelector: {}
     ports:
