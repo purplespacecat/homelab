@@ -1,0 +1,56 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: jellyfin-alerts
+  namespace: monitoring
+  labels:
+    # Selected by the Prometheus rule selector (same label as homelab-alerts).
+    release: prometheus-stack
+spec:
+  groups:
+    - name: jellyfin
+      rules:
+        # The media HDD uses `nofail`, so if it unplugs/unmounts the node stays
+        # up and the running Jellyfin pod keeps a dead mount — the initContainer
+        # only guards at startup. When the mount vanishes, node-exporter stops
+        # reporting the filesystem and this series disappears. `absent()` then
+        # fires. (Matches on mountpoint only — robust to an ntfs/ntfs3 driver
+        # change on remount.) `for: 10m` also debounces Prometheus restarts.
+        - alert: JellyfinMediaMountGone
+          expr: absent(node_filesystem_size_bytes{mountpoint="/mnt/media"})
+          for: 10m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Jellyfin media HDD not mounted on the node"
+            description: "node-exporter reports no filesystem at /mnt/media for 10m — the external media drive is unmounted/unplugged. Jellyfin will serve an empty or stale library. Check the HDD and `scripts/common/mount-media-hdd.sh`."
+
+        # Generic PodCrashLooping needs sustained looping; a single OOMKill or
+        # one-off restart mid-stream wouldn't trip it. This catches that.
+        - alert: JellyfinRestarted
+          expr: increase(kube_pod_container_status_restarts_total{namespace="media",container="jellyfin"}[1h]) > 0
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Jellyfin container restarted"
+            description: "Jellyfin restarted {{ $value | printf \"%.0f\" }} time(s) in the last hour (namespace media). Likely an OOMKill (2560Mi limit) or crash — check `kubectl describe pod` and last-state reason."
+
+        # Working set approaching the 2560Mi limit -> OOMKill risk mid-stream.
+        # Join memory usage (cAdvisor) to the limit (kube-state-metrics) per pod.
+        - alert: JellyfinMemoryNearLimit
+          expr: |
+            max by (namespace, pod) (
+              container_memory_working_set_bytes{namespace="media", container="jellyfin"}
+            )
+            / on (namespace, pod)
+            max by (namespace, pod) (
+              kube_pod_container_resource_limits{namespace="media", container="jellyfin", resource="memory"}
+            )
+            > 0.9
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Jellyfin memory near its limit"
+            description: "Jellyfin working set is above 90% of its 2560Mi limit for 10m (current: {{ $value | humanizePercentage }}). Risk of OOMKill during playback — check for a software transcode (HEVC on this CPU) or a metadata scan."
