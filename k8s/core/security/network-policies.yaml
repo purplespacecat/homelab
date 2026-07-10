@@ -59,6 +59,20 @@ spec:
       port: 8080  # kube-state-metrics
     - protocol: TCP
       port: 10250 # Kubelet
+  # node-exporter (hostNetwork) and the kubelet/cAdvisor endpoint live on the
+  # NODE IP, not a pod IP — a namespaceSelector can never match them, so the
+  # rule above is a no-op for those two targets and they stay down (no
+  # node_filesystem / container_* metrics). An ipBlock to the node is required.
+  # Node IP is ${NODE_IP} in cluster-config; static here since this file isn't
+  # var-substituted. Update both if the node IP ever changes.
+  - to:
+    - ipBlock:
+        cidr: 192.168.100.98/32
+    ports:
+    - protocol: TCP
+      port: 9100   # node-exporter (hostNetwork)
+    - protocol: TCP
+      port: 10250  # kubelet / cAdvisor
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy

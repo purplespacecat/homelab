@@ -96,13 +96,13 @@ spec:
         memory: 2560Mi
 
     metrics:
-      enabled: true
-      serviceMonitor:
-        enabled: true
-        # Prometheus selects ServiceMonitors by this label (see the live
-        # Prometheus spec.serviceMonitorSelector) — without it, no scrape.
-        labels:
-          release: prometheus-stack
+      # Disabled: Jellyfin only serves /metrics when its app-level
+      # EnableMetrics=true (default false), so this ServiceMonitor was scraping
+      # a 404 target 24/7. Jellyfin's native exporter is low-value anyway
+      # (HTTP/kestrel/.NET counters — no stream or transcode metrics), so it's
+      # not worth the app config + restart. Alerting for Jellyfin comes from
+      # node-exporter / cAdvisor / kube-state-metrics instead (jellyfin-alerts).
+      enabled: false
 
   # The chart offers no mountPropagation on the media mount. HostToContainer
   # makes a host-side remount (HDD replug + mount -a) reach a running pod
