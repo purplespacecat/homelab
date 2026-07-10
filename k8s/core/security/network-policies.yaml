@@ -56,9 +56,15 @@ spec:
     - protocol: TCP
       port: 9100  # Node exporter
     - protocol: TCP
-      port: 8080  # kube-state-metrics
+      port: 8080  # kube-state-metrics + prometheus-operator + alertmanager reloader
     - protocol: TCP
       port: 10250 # Kubelet
+    - protocol: TCP
+      port: 3000  # Grafana
+    - protocol: TCP
+      port: 9093  # Alertmanager
+    - protocol: TCP
+      port: 9153  # CoreDNS (kube-system)
   # node-exporter (hostNetwork) and the kubelet/cAdvisor endpoint live on the
   # NODE IP, not a pod IP — a namespaceSelector can never match them, so the
   # rule above is a no-op for those two targets and they stay down (no
@@ -133,6 +139,10 @@ spec:
     - namespaceSelector:
         matchLabels:
           kubernetes.io/metadata.name: ingress-nginx
+    # Prometheus scrapes Grafana's own /metrics on 3000 (self-health).
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/name: prometheus
     ports:
     - protocol: TCP
       port: 3000
@@ -202,6 +212,9 @@ spec:
     ports:
     - protocol: TCP
       port: 9093
+    # Prometheus also scrapes the config-reloader sidecar's /metrics on 8080.
+    - protocol: TCP
+      port: 8080
   egress:
   - to:
     - podSelector:
@@ -321,3 +334,45 @@ spec:
       port: 3100
   egress:
   - {}  # Allow all egress for storage access
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-prometheus-operator
+  namespace: monitoring
+spec:
+  # Was previously created out-of-band (not in this repo) as an Egress-only
+  # policy, so default-deny-all still blocked ALL ingress to the operator —
+  # Prometheus couldn't scrape its /metrics (8080) and the target stayed down.
+  # Now Git-managed: same egress (API + DNS) it had, plus the missing ingress.
+  # NB: the operator carries the legacy bare `app` label (unlike the stack's
+  # other pods) — this selector is correct for it.
+  podSelector:
+    matchLabels:
+      app: kube-prometheus-stack-operator
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/name: prometheus
+    ports:
+    - protocol: TCP
+      port: 8080  # operator /metrics
+  egress:
+  # Manages CRs via the Kubernetes API.
+  - to:
+    - namespaceSelector: {}
+    ports:
+    - protocol: TCP
+      port: 443
+  # DNS.
+  - to:
+    - namespaceSelector: {}
+    ports:
+    - protocol: TCP
+      port: 53
+    - protocol: UDP
+      port: 53
