@@ -1,0 +1,63 @@
+# Default-deny + scoped-allow for the media namespace.
+#
+# Why: Jellyfin runs privileged (for /dev/dri QSV transcoding) in a namespace
+# that previously had NO NetworkPolicy — a container escape would have had
+# unrestricted pod-to-pod and egress reach across the cluster. Since the pod
+# stays privileged (de-privileging risks breaking hardware transcoding on this
+# single node), the network layer is the mitigation that contains it.
+#
+# Mirrors the proven monitoring/allow-grafana pattern: ingress is reached
+# through the hostNetwork ingress-nginx DaemonSet, so a namespaceSelector for
+# ingress-nginx matches it (its pod IP == the node IP). The explicit ipBlock for
+# the node IP is belt-and-suspenders for that same hostNetwork source.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: media
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-jellyfin
+  namespace: media
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: jellyfin
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  # Web UI / API reached through the ingress-nginx controller (hostNetwork, so
+  # its source is the node IP — both selectors below cover it).
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: ingress-nginx
+    - ipBlock:
+        cidr: 192.168.100.98/32
+    ports:
+    - protocol: TCP
+      port: 8096
+  egress:
+  # DNS — resolve metadata providers and in-cluster names (CoreDNS in kube-system).
+  - to:
+    - namespaceSelector: {}
+    ports:
+    - protocol: TCP
+      port: 53
+    - protocol: UDP
+      port: 53
+  # Outbound HTTPS/HTTP for metadata + artwork (TheMovieDB, image CDNs) and the
+  # plugin catalog. No `to` selector = any destination on these ports only.
+  - ports:
+    - protocol: TCP
+      port: 443
+    - protocol: TCP
+      port: 80
