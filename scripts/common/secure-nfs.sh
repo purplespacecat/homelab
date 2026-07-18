@@ -22,14 +22,29 @@ for dir in prometheus grafana alertmanager-0 alertmanager-1; do
     echo "Secured /data/$dir"
 done
 
-# Update exports file with more secure options
-cat > /etc/exports <<EOF
-/data           *(rw,sync,no_subtree_check,no_root_squash)
-/data/prometheus *(rw,sync,no_subtree_check,all_squash,anonuid=65534,anongid=65534)
-/data/grafana    *(rw,sync,no_subtree_check,all_squash,anonuid=65534,anongid=65534)
-/data/alertmanager-0 *(rw,sync,no_subtree_check,all_squash,anonuid=65534,anongid=65534)
-/data/alertmanager-1 *(rw,sync,no_subtree_check,all_squash,anonuid=65534,anongid=65534)
-EOF
+# Allowed NFS clients. Was "*" (ANY LAN host could mount /data as root over the
+# WiFi). NFS is only consumed in-cluster — restrict to the k3s node + pod CIDR.
+NFS_ALLOWED="${NFS_ALLOWED:-192.168.100.98 10.42.0.0/16}"
+
+# Emit "<path> host1(opts) host2(opts) ..." for one export line.
+export_line() {
+    local path="$1" opts="$2" spec=""
+    for host in $NFS_ALLOWED; do
+        spec="${spec} ${host}(${opts})"
+    done
+    echo "${path}${spec}"
+}
+
+# Update exports file with more secure options (restricted clients + squash)
+SQUASH="rw,sync,no_subtree_check,all_squash,anonuid=65534,anongid=65534"
+{
+    echo "# Restricted to the k3s node + pod CIDR (was '*'). Clients: ${NFS_ALLOWED}"
+    export_line /data                "rw,sync,no_subtree_check,no_root_squash"
+    export_line /data/prometheus     "$SQUASH"
+    export_line /data/grafana        "$SQUASH"
+    export_line /data/alertmanager-0 "$SQUASH"
+    export_line /data/alertmanager-1 "$SQUASH"
+} > /etc/exports
 
 # Re-export NFS shares
 exportfs -ra

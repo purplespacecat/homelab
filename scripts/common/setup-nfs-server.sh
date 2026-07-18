@@ -51,19 +51,34 @@ echo -e "${GREEN}✓ Permissions configured${NC}"
 # Step 4: Configure NFS exports
 echo -e "\n${YELLOW}[4/8] Configuring NFS exports...${NC}"
 
-cat > /etc/exports <<'EOF'
-# Kubernetes NFS Exports
-# Main data directory for NFS provisioner (dynamic PVC creation)
-/data *(rw,sync,no_subtree_check,no_root_squash)
+# Allowed NFS clients. These exports were previously "*" (ANY host): because
+# no_root_squash is set, any device on the LAN — every phone/laptop on the WiFi —
+# could mount /data and read/write every file as root (all Prometheus/Grafana/
+# Loki/Tempo PV data and media). NFS is only consumed in-cluster, so restrict to
+# the k3s node itself and the pod CIDR. Override for a multi-node cluster, e.g.
+#   NFS_ALLOWED="192.168.100.98 10.42.0.0/16" sudo ./setup-nfs-server.sh
+NFS_ALLOWED="${NFS_ALLOWED:-192.168.100.98 10.42.0.0/16}"
+NFS_OPTS="rw,sync,no_subtree_check,no_root_squash"
 
-# Media directory for Plex
-/data/media *(rw,sync,no_subtree_check,no_root_squash)
+# Expand the client list into "host1(opts) host2(opts) ..." for one export line.
+nfs_clients() {
+    local spec=""
+    for host in $NFS_ALLOWED; do
+        spec="${spec} ${host}(${NFS_OPTS})"
+    done
+    echo "${spec# }"
+}
 
-# Plex config directory
-/data/plex *(rw,sync,no_subtree_check,no_root_squash)
-EOF
+{
+    echo "# Kubernetes NFS Exports"
+    echo "# Restricted to the k3s node + pod CIDR (was '*' — any LAN host)."
+    echo "# Clients: ${NFS_ALLOWED}"
+    echo "/data $(nfs_clients)"          # NFS provisioner (dynamic PVC creation)
+    echo "/data/media $(nfs_clients)"    # Media directory
+    echo "/data/plex $(nfs_clients)"     # Plex config directory
+} > /etc/exports
 
-echo -e "${GREEN}✓ Exports configured${NC}"
+echo -e "${GREEN}✓ Exports configured (clients: ${NFS_ALLOWED})${NC}"
 
 # Step 5: Apply NFS exports
 echo -e "\n${YELLOW}[5/8] Applying NFS exports...${NC}"
@@ -79,11 +94,15 @@ echo -e "${GREEN}✓ NFS server started${NC}"
 # Step 7: Configure firewall (if active)
 echo -e "\n${YELLOW}[7/8] Checking firewall configuration...${NC}"
 if command -v ufw &>/dev/null && ufw status | grep -q 'active'; then
-    echo -e "${YELLOW}Firewall is active, opening NFS ports...${NC}"
-    ufw allow from 192.168.100.0/24 to any port nfs
-    ufw allow from 192.168.100.0/24 to any port 111
-    ufw allow from 192.168.100.0/24 to any port 2049
-    echo -e "${GREEN}✓ Firewall configured${NC}"
+    echo -e "${YELLOW}Firewall is active, opening NFS ports to allowed clients only...${NC}"
+    # Was 192.168.100.0/24 (the whole LAN). NFS is node-local, so scope the
+    # firewall to the same clients as the exports. Node-to-itself traffic goes
+    # over loopback (ufw allows lo by default), so the node still mounts fine.
+    for client in $NFS_ALLOWED; do
+        ufw allow from "$client" to any port 111 proto tcp
+        ufw allow from "$client" to any port 2049 proto tcp
+    done
+    echo -e "${GREEN}✓ Firewall configured (clients: ${NFS_ALLOWED})${NC}"
 else
     echo -e "${BLUE}ℹ Firewall not active or ufw not installed${NC}"
 fi
