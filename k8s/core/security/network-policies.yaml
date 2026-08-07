@@ -362,12 +362,15 @@ spec:
     - protocol: TCP
       port: 8080  # operator /metrics
   egress:
-  # Manages CRs via the Kubernetes API.
-  - to:
-    - namespaceSelector: {}
-    ports:
+  # Manages CRs via the Kubernetes API. No `to:` selector on purpose: the
+  # kubernetes Service DNATs to the *node* IP (${NODE_IP}:6443), which is not a
+  # pod, so `namespaceSelector: {}` never matches it and the post-DNAT port is
+  # 6443, not 443. Same shape as allow-prometheus / allow-grafana above.
+  - ports:
     - protocol: TCP
-      port: 443
+      port: 443  # Kubernetes API (ClusterIP)
+    - protocol: TCP
+      port: 6443  # Kubernetes API (node endpoint, post-DNAT)
   # DNS.
   - to:
     - namespaceSelector: {}
