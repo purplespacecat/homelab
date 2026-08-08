@@ -10,6 +10,7 @@ This directory contains FluxCD resources for managing the homelab infrastructure
 - `networking/` - Network components (MetalLB, NGINX Ingress)
 - `security/` - Security components (cert-manager)
 - `monitoring/` - Monitoring stack (Prometheus, Grafana, Alertmanager, Loki, Tempo)
+- `media/` - Jellyfin
 
 ## Deployment Order
 
@@ -21,6 +22,7 @@ Flux automatically handles dependencies, but the logical order is:
 4. Networking (MetalLB, NGINX Ingress)
 5. Security (cert-manager + issuers)
 6. Monitoring (Prometheus stack, Loki, Promtail, Tempo)
+7. Media (Jellyfin — after monitoring for the ServiceMonitor CRD)
 
 ## Modifying Resources
 
