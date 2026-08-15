@@ -71,7 +71,12 @@ spec:
             hosts:
               - grafana.${NODE_IP}.nip.io
               - grafana.local
-      # Dashboards from Grafana.com
+      # Dashboards from Grafana.com. Only dashboards whose queries match what
+      # this cluster actually exports belong here — 7249 (pre-1.16 cadvisor
+      # labels, old nginx/kubelet metric names), 16714 (gotk_reconcile_*,
+      # dropped by Flux controllers; we export gotk_resource_info via KSM
+      # instead) and 13639 (needs a Loki `job` label Promtail doesn't ship)
+      # were removed 2026-08 after rendering permanently empty.
       dashboardProviders:
         dashboardproviders.yaml:
           apiVersion: 1
@@ -90,18 +95,6 @@ spec:
             gnetId: 1860
             revision: 37
             datasource: Prometheus
-          k8s-cluster:
-            gnetId: 7249
-            revision: 1
-            datasource: Prometheus
-          flux-cluster:
-            gnetId: 16714
-            revision: 1
-            datasource: Prometheus
-          loki-logs:
-            gnetId: 13639
-            revision: 2
-            datasource: Loki
       # Datasources (Prometheus + Alertmanager are provided by the chart's sidecar)
       additionalDataSources:
         - name: Loki
@@ -115,7 +108,10 @@ spec:
         - name: Tempo
           type: tempo
           uid: tempo
-          url: http://tempo:3100
+          # Tempo 2.x serves its HTTP API on 3200 (3100 was the pre-2.x port;
+          # the 1.24.4 chart upgrade moved it). Must match the allow-grafana /
+          # allow-tempo NetworkPolicies in k8s/core/security.
+          url: http://tempo:3200
           access: proxy
           isDefault: false
           jsonData:
