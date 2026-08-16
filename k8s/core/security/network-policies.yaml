@@ -171,7 +171,7 @@ spec:
           app.kubernetes.io/name: tempo
     ports:
     - protocol: TCP
-      port: 3100  # Tempo HTTP API
+      port: 3200  # Tempo HTTP API (2.x port; 3100 was pre-2.x)
   - to:
     - namespaceSelector: {}
     ports:
@@ -323,7 +323,7 @@ spec:
           kubernetes.io/metadata.name: monitoring
     ports:
     - protocol: TCP
-      port: 3100  # Tempo HTTP API
+      port: 3200  # Tempo HTTP API (2.x port; 3100 was pre-2.x)
   # Accept from ingress for UI access (optional)
   - from:
     - namespaceSelector:
@@ -331,7 +331,7 @@ spec:
           kubernetes.io/metadata.name: ingress-nginx
     ports:
     - protocol: TCP
-      port: 3100
+      port: 3200
   egress:
   - {}  # Allow all egress for storage access
 ---
