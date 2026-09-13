@@ -1,0 +1,169 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ntopng
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: ntopng
+    app.kubernetes.io/part-of: monitoring
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ntopng
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: ntopng
+        app.kubernetes.io/part-of: monitoring
+    spec:
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          command:
+            - redis-server
+            - "--bind"
+            - "127.0.0.1"
+            - "--protected-mode"
+            - "no"
+            - "--save"
+            - ""
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+        - name: ntopng
+          image: ntop/ntopng:stable
+          command:
+            - ntopng
+          args:
+            - "--community"
+            - "-i"
+            - "${NETWORK_INTERFACE}"
+            - "-m"
+            - "192.168.100.0/24"
+            - "-r"
+            - "127.0.0.1:6379"
+            - "-w"
+            - "3000"
+            - "-d"
+            - "/var/lib/ntopng"
+            - "-u"
+            - "root"
+          securityContext:
+            capabilities:
+              add:
+                - NET_ADMIN
+                - NET_RAW
+          volumeMounts:
+            - name: ntopng-data
+              mountPath: /var/lib/ntopng
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 1000m
+              memory: 1024Mi
+      volumes:
+        - name: ntopng-data
+          persistentVolumeClaim:
+            claimName: ntopng-data
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ntopng-data
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: ntopng
+    app.kubernetes.io/part-of: monitoring
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ntopng
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: ntopng
+    app.kubernetes.io/part-of: monitoring
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 3000
+      targetPort: 3000
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: ntopng
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ntopng
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: ntopng
+    app.kubernetes.io/part-of: monitoring
+  annotations:
+    cert-manager.io/cluster-issuer: homelab-ca-issuer
+spec:
+  ingressClassName: nginx
+  tls:
+    - secretName: ntopng-tls
+      hosts:
+        - ntopng.${NODE_IP}.nip.io
+        - ntopng.local
+  rules:
+    - host: ntopng.${NODE_IP}.nip.io
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: ntopng
+                port:
+                  number: 3000
+    - host: ntopng.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: ntopng
+                port:
+                  number: 3000
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: ntopng
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: ntopng
+    app.kubernetes.io/part-of: monitoring
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ntopng
+  endpoints:
+    - port: http
+      interval: 30s
+      path: /lua/metrics.lua
