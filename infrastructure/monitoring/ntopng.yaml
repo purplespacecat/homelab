@@ -150,20 +150,4 @@ spec:
                 name: ntopng
                 port:
                   number: 3000
----
-apiVersion: monitoring.coreos.com/v1
-kind: ServiceMonitor
-metadata:
-  name: ntopng
-  namespace: monitoring
-  labels:
-    app.kubernetes.io/name: ntopng
-    app.kubernetes.io/part-of: monitoring
-spec:
-  selector:
-    matchLabels:
-      app.kubernetes.io/name: ntopng
-  endpoints:
-    - port: http
-      interval: 30s
-      path: /lua/metrics.lua
+
